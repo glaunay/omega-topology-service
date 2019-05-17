@@ -3,28 +3,8 @@ import commander from 'commander';
 import fs from 'fs';
 import nano from 'nano';
 import http from 'http';
+import express from 'express';
 import { escapeRegExp, renewDatabase, registerPairs, registerLines, Config, rebuildTreesFrom } from './helpers';
-
-// const file = "/Users/lberanger/dataOmega/mitab200K.mitab"; // merged_uniprot_safe.mitab
-
-// (async () => {
-//     const psq = new PSICQuic();
-    
-//     let t = Date.now();
-
-//     await psq.read(file);
-
-//     console.log("Read in ", (Date.now() - t) / 1000, " seconds");
-
-//     let i = 0;
-//     for (const couple of psq.couples()) {
-//         if (i > 2) break;
-
-//         if (couple[2].length > 2) {
-//             console.log(couple); i++;
-//         }
-//     }
-// })();
 
 commander
     .option('-r, --rebuild <specie>', 'Rebuild partners from mitab & OMTree cache. Specify "all" for rebuilding all trees.')
@@ -33,11 +13,12 @@ commander
     .option('-t, --threads <number>', 'Number of simultenous request to database when constructing from mitab.', parseInt, 100)
     .option('-c, --rebuild-cache <specie>', 'Rebuild OMTree cache. Specify "all" for rebuilding all the cache.')
     .option('-d, --disable-automatic-rebuild', 'Disable the automatic check of the old cached topologies to rebuild')
+    .option('-p, --port <listenPort>', 'Port to open for listening to queries', 3455)
 .parse(process.argv);
 
-const MAX_TIME = 1000 * 60 * 60 * 24 * 15; // 15 jours 
 
 const CONFIG = JSON.parse(fs.readFileSync('config.json', { encoding: "utf-8" })) as Config;
+const MAX_TIME = 1000 * 60 * 60 * 24 * CONFIG.max_days_before_renew; // 15 jours par défaut
 
 (async () => {
     // Main process
@@ -155,4 +136,44 @@ const CONFIG = JSON.parse(fs.readFileSync('config.json', { encoding: "utf-8" }))
             await rebuildTreesFrom(CONFIG, files);
         }
     }
+
+    // Now, listen to queries !
+    const app = express();
+    const trees_cache: { [treeKey: string]: string } = {};
+
+    app.get('/tree/:name', (req, res) => {
+        const name = req.params.name as string;
+
+        // Recheche si l'arbre existe en cache
+        if (name in trees_cache) {
+            res.setHeader('Content-Type', 'application/json');
+            res.send(trees_cache[name]);
+        }
+        else {
+            // Récupère le fichier
+            const full_name = `uniprot_${name}_homology.json`;
+
+            fs.exists(CONFIG.trees + full_name, exists => {
+                if (exists) {
+                    fs.readFile(CONFIG.trees + full_name, "utf-8", (err, data) => {
+                        if (err) {
+                            res.status(500).send();
+                        }
+                        else {
+                            trees_cache[name] = data;
+                            res.setHeader('Content-Type', 'application/json');
+                            res.send(trees_cache[name]);
+                        }
+                    })
+                }
+                else {
+                    res.status(404).send();
+                }
+            });
+        }
+    });
+
+    app.listen(commander.port, () => {
+        console.log(`Omega topology service listening on port ${commander.port}.`);
+    });
 })();

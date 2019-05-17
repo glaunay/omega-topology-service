@@ -2,5 +2,6 @@
     "trees": "./source/homology/",
     "mitab": "./source/mitab/merged_uniprot_safe.mitab",
     "couchdb": "http://localhost:5984",
-    "cache": "./cache/"
+    "cache": "./cache/",
+    "max_days_before_renew": 15
 }

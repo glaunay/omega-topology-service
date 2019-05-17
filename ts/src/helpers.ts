@@ -5,7 +5,7 @@ import HomologyTree from './HomologyTree';
 import OmegaTopology from './OmegaTopology';
 
 export interface Config {
-    trees: string, mitab: string, couchdb: string, cache: string 
+    trees: string, mitab: string, couchdb: string, cache: string, max_days_before_renew: number 
 }
 
 /**
