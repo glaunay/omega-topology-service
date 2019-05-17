@@ -1,0 +1,35 @@
+{
+    "compilerOptions": {
+      "allowJs": true,
+      "baseUrl": ".",
+      "lib": [
+        "es2015",
+        "esnext.asynciterable",
+        "dom"
+      ],
+      "listEmittedFiles": true,
+      "listFiles": false,
+      "maxNodeModuleJsDepth": 10,
+      "module": "commonjs",
+      "moduleResolution": "node",
+      "outDir": "./build/",
+      "paths": {
+        "*": [
+          "node_modules/"
+        ]
+      },
+      "preserveConstEnums": true,
+      "removeComments": false,
+      "target": "esnext",
+      "esModuleInterop": true
+    },
+    "files": [ // path to the files to compile
+        "./ts/src/cli.ts",
+        "./ts/src/index.ts",
+        "./ts/src/helpers.ts"
+    ],
+    "exclude": [
+      // "../taskobject"
+    ]
+    /* Enables experimental support for emitting type metadata for decorators. */
+  }

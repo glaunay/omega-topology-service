@@ -1,0 +1,6 @@
+{
+    "trees": "./source/homology/",
+    "mitab": "./source/mitab/merged_uniprot_safe.mitab",
+    "couchdb": "http://localhost:5984",
+    "cache": "./cache/"
+}

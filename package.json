@@ -1,0 +1,29 @@
+{
+  "name": "omega-topology-service",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "commander": "^2.20.0",
+    "graphlib": "^2.1.7",
+    "md5": "^2.2.1",
+    "nano": "^8.1.0",
+    "node-fetch": "^2.6.0",
+    "progress": "^2.0.3",
+    "python-enumerate": "^1.0.1",
+    "python-zip": "^1.0.5",
+    "reversible-key-map": "^1.0.2"
+  },
+  "devDependencies": {
+    "@types/graphlib": "^2.1.5",
+    "@types/md5": "^2.1.33",
+    "@types/node": "^12.0.2",
+    "@types/progress": "^2.0.3"
+  }
+}
