@@ -1,47 +1,33 @@
 import fs from 'fs';
+import http from 'http';
 import nano, { MaybeDocument } from 'nano';
 import ProgressBar from 'progress';
 import HomologyTree from './HomologyTree';
-import OmegaTopology from './OmegaTopology';
+import OmegaTopology from 'omega-topology-fullstack';
+import PSICQuic from './PSICQuic';
 
 export interface Config {
     trees: string, mitab: string, couchdb: string, cache: string, max_days_before_renew: number 
 }
 
 /**
- * Create a new set that contains elements contained in current set and given set
+ * Escape characters of a regular expression.
+ *
+ * @param {string} string
+ * @returns {string}
  */
-export function setIntersection(current: Set<any>, other: Set<any>) {
-    const set = new Set();
-
-    for (const value of other) {
-        if (current.has(value))
-            set.add(value);
-    }
-
-    return set;
-}
-
-/**
- * Add every element in given iterables and the elements of the current set in a new set
- */
-export function setUnion(current: Set<any>, ...iterables: Iterable<any>[]) {
-    const set = new Set(current);
-
-    for (const it of iterables) {
-        for (const value of it) {
-            set.add(value);
-        }
-    }
-
-    return set;
-}
-
-export function escapeRegExp(string: string) {
+export function escapeRegExp(string: string) : string {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
 }
 
-export async function rebuildTreesFrom(CONFIG: Config, files: string[]) {
+/**
+ * Rebuild tree cache from files array (filename, pointing to *.json trees)
+ *
+ * @param {Config} CONFIG
+ * @param {string[]} files
+ * @returns {Promise<void>}
+ */
+export async function rebuildTreesFrom(CONFIG: Config, files: string[]) : Promise<void> {
     // Lecture des fichiers d'arbre à construire
     const topologies: OmegaTopology[] = [];
     for (const f of files) {
@@ -86,7 +72,15 @@ export async function rebuildTreesFrom(CONFIG: Config, files: string[]) {
     console.log("Trees has been rebuilt.");
 }
 
-export async function renewDatabase(nn: nano.ServerScope, renew_partners: boolean, renew_lines: boolean) {
+/**
+ * Empty the databases and recreate it.
+ *
+ * @param {nano.ServerScope} nn
+ * @param {boolean} renew_partners
+ * @param {boolean} renew_lines
+ * @returns {Promise<void>}
+ */
+export async function renewDatabase(nn: nano.ServerScope, renew_partners: boolean, renew_lines: boolean) : Promise<void> {
     if (renew_partners)
         await nn.db.destroy("id_map").then(() => nn.db.create("id_map"));
 
@@ -94,6 +88,13 @@ export async function renewDatabase(nn: nano.ServerScope, renew_partners: boolea
         await nn.db.destroy("interactors").then(() => nn.db.create("interactors"));
 }
 
+/**
+ * Register all the pairs in the CouchDB database
+ *
+ * @param {nano.ServerScope} nn
+ * @param {{ [id: string]: Iterable<string> }} pairs
+ * @param {number} [max_paquet=100]
+ */
 export async function registerPairs(nn: nano.ServerScope, pairs: { [id: string]: Iterable<string> }, max_paquet = 100) {
     const id_db = nn.use("id_map");
 
@@ -118,6 +119,13 @@ export async function registerPairs(nn: nano.ServerScope, pairs: { [id: string]:
     bar.terminate();
 }
 
+/**
+ * Register all the mitab lines in the CouchDB database
+ *
+ * @param {nano.ServerScope} nn
+ * @param {{ [id: string]: { [coupledId: string]: string[] } }} pairs
+ * @param {number} [max_paquet=100]
+ */
 export async function registerLines(nn: nano.ServerScope, pairs: { [id: string]: { [coupledId: string]: string[] } }, max_paquet = 100) {
     const interactors = nn.use("interactors");
 
@@ -148,19 +156,122 @@ export async function registerLines(nn: nano.ServerScope, pairs: { [id: string]:
     bar.terminate();
 }
 
-export function countFileLines(filePath: string) {
-    return new Promise((resolve, reject) => {
-        let lineCount = 0;
-        fs.createReadStream(filePath)
-            .on("data", (buffer) => {
-                let idx = -1;
-                lineCount--; // Because the loop will run once for idx=-1
-                do {
-                    idx = buffer.indexOf(10, idx + 1);
-                    lineCount++;
-                } while (idx !== -1);
-            }).on("end", () => {
-                resolve(lineCount);
-            }).on("error", reject);
-    }) as Promise<number>;
+/**
+ * Rebuild from scratch the Couch database.
+ *
+ * @param {Config} CONFIG
+ * @param {boolean} with_partners
+ * @param {boolean} with_lines
+ * @param {number} threads
+ */
+export async function reconstructBDD(CONFIG: Config, with_partners: boolean, with_lines: boolean, threads: number) {
+    console.log(`Rebuilding ${with_partners ? "partners" : 'only'} ${with_lines ? (with_partners ? "and " : "") + "lines" : ''}.`);
+
+    const nn = nano(CONFIG.couchdb);
+
+    // Reconstruction de la base de données
+
+    // 1) Lecture du mitab entier (CONFIG.mitab)
+    console.log("Reading Mitab file");
+    const psq = new PSICQuic(undefined, with_lines);
+    let t = Date.now();
+    await psq.read(CONFIG.mitab);
+    console.log("Read completed in ", (Date.now() - t) / 1000, " seconds");
+
+    // 2) Vidage de l'existant
+    // & 3) Construction des documents (interactors et id_map)
+    console.log("Recreate current database.");
+    await renewDatabase(nn, with_partners, with_lines);
+
+    const before_run = http.globalAgent.maxSockets;
+    http.globalAgent.maxSockets = 200;
+
+    if (with_partners) {
+        // 4) Obtention des paires id => partners[]
+        console.log("Getting partners");
+        const pairs = psq.getAllPartnersPairs();
+
+        // 5) Insertion des paires (peut être long)
+        console.log("Inserting interactors partners in CouchDB");
+        await registerPairs(nn, pairs, threads);
+        console.log("Pairs has been successfully registered")
+    }
+    
+    if (with_lines) {
+        // 6) Obtention des objets id => { [partners]: lignes_liees[] }
+        console.log("Getting raw lines to insert");
+        const lines = psq.getAllLinesPaired();
+
+        // 7) Insertion des lignes (peut être long)
+        console.log("Inserting raw lines in CouchDB");
+        await registerLines(nn, lines, threads)
+        console.log("Lines has been successfully registered");
+
+        console.log("Flushing PSICQuic object");
+        psq.flushRaw();
+    }
+
+    http.globalAgent.maxSockets = before_run;
+    console.log("Rebuilding of the database is complete.");
+}
+
+export async function rebuildAllCache(CONFIG: Config, specie?: string) {
+    // Vérifie que l'espèce existe dans les fichiers homologyTree
+    let files = fs.readdirSync(CONFIG.trees).filter(f => f.match(/\.json$/));
+    if (specie) {
+        const escaped = escapeRegExp(specie);
+        const match = new RegExp("^uniprot_" + escaped + "_homology\\.json$", "i");
+
+        console.log(`Looking for specie "${specie}" into "${CONFIG.trees}".`)
+        const tree = files.find(e => match.test(e));
+        if (!tree) {
+            // aucune espèce ne correspond
+            console.error(`Any specie has matched "${specie}" while searching for homology trees. Exiting.`);
+            process.exit(1);
+        }
+
+        files = [tree];
+    }
+
+    await rebuildTreesFrom(CONFIG, files);
+}
+
+/**
+ * Renew tree cache and create missing trees automatically.
+ *
+ * @param {Config} CONFIG
+ */
+export async function automaticCacheBuild(CONFIG: Config) {
+    const MAX_TIME = 1000 * 60 * 60 * 24 * CONFIG.max_days_before_renew; // 15 jours par défaut
+
+    let tree_files = fs.readdirSync(CONFIG.trees).filter(f => f.match(/\.json$/));
+    let files = fs.readdirSync(CONFIG.cache).filter(f => f.match(/\.topology$/));
+
+    // Recherche des arbres qui n'existent pas dans le cache (donc à construire)
+    tree_files = tree_files.filter(f => !files.includes(f.replace('.json', '.topology')));
+    const missing = tree_files.length;
+
+    // Recherche des fichiers .topology à actualiser
+    files = files
+        .map(f => [f, fs.statSync(CONFIG.cache + f).mtime]) // Recherche le mtime de chaque fichier et renvoie un [name, date]
+        .filter(f => (f[1] as Date).getTime() < (Date.now() - MAX_TIME)) // Gare si date_fichier < actuelle - temps max (temps max dépassé)
+        .map(f => f[0] as string) // Renvoie uniquement le nom du fichier
+        .map(f => f.replace('.topology', '.json')) // Transforme les fichiers *.topology en *.json
+        .filter(f => { // Vérifie si le fichier associé existe
+            if (!fs.existsSync(CONFIG.trees + f)) {
+                console.error(`File ${f} does not exists when rebuilding from cache. Has ${f.replace('.json', '.topology')} related tree changed name ?`);
+                
+                return false;
+            }
+
+            return true;
+        });
+    const outdated = files.length;
+
+    files.push(...tree_files);
+
+    if (files.length > 0) {
+        console.log(`${missing} missing tree${missing > 1 ? 's' : ''} in cache, ${outdated} outdated tree${outdated > 1 ? 's' : ''} has been detected. (Re)building...\n`);
+        await rebuildTreesFrom(CONFIG, files);
+    }
 }

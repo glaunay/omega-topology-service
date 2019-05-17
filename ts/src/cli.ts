@@ -1,10 +1,7 @@
-import PSICQuic from './PSICQuic';
 import commander from 'commander';
 import fs from 'fs';
-import nano from 'nano';
-import http from 'http';
 import express from 'express';
-import { escapeRegExp, renewDatabase, registerPairs, registerLines, Config, rebuildTreesFrom } from './helpers';
+import { Config, reconstructBDD, automaticCacheBuild, rebuildAllCache } from './helpers';
 
 commander
     .option('-r, --rebuild <specie>', 'Rebuild partners from mitab & OMTree cache. Specify "all" for rebuilding all trees.')
@@ -13,67 +10,20 @@ commander
     .option('-t, --threads <number>', 'Number of simultenous request to database when constructing from mitab.', parseInt, 100)
     .option('-c, --rebuild-cache <specie>', 'Rebuild OMTree cache. Specify "all" for rebuilding all the cache.')
     .option('-d, --disable-automatic-rebuild', 'Disable the automatic check of the old cached topologies to rebuild')
-    .option('-p, --port <listenPort>', 'Port to open for listening to queries', 3455)
+    .option('-p, --port <listenPort>', 'Port to open for listening to queries', parseInt, 3455)
 .parse(process.argv);
 
 
 const CONFIG = JSON.parse(fs.readFileSync('config.json', { encoding: "utf-8" })) as Config;
-const MAX_TIME = 1000 * 60 * 60 * 24 * CONFIG.max_days_before_renew; // 15 jours par défaut
 
 (async () => {
     // Main process
     if (commander.rebuild) {    
         const with_lines = commander.onlyLines || !commander.onlyInteractors;
         const with_partners = !commander.onlyLines || commander.onlyInteractors;
+        const threads = commander.threads;
 
-        console.log(`Rebuilding ${with_partners ? "partners" : 'only'} ${with_lines ? (with_partners ? "and " : "") + "lines" : ''}.`);
-
-        const nn = nano(CONFIG.couchdb);
-
-        // Reconstruction de la base de données
-    
-        // 1) Lecture du mitab entier (CONFIG.mitab)
-        console.log("Reading Mitab file");
-        const psq = new PSICQuic(undefined, with_lines);
-        let t = Date.now();
-        await psq.read(CONFIG.mitab);
-        console.log("Read completed in ", (Date.now() - t) / 1000, " seconds");
-
-        // 2) Vidage de l'existant
-        // & 3) Construction des documents (interactors et id_map)
-        console.log("Recreate current database.");
-        await renewDatabase(nn, with_partners, with_lines);
-
-        const before_run = http.globalAgent.maxSockets;
-        http.globalAgent.maxSockets = 200;
-
-        if (with_partners) {
-            // 4) Obtention des paires id => partners[]
-            console.log("Getting partners");
-            const pairs = psq.getAllPartnersPairs();
-
-            // 5) Insertion des paires (peut être long)
-            console.log("Inserting interactors partners in CouchDB");
-            await registerPairs(nn, pairs, commander.threads);
-            console.log("Pairs has been successfully registered")
-        }
-       
-        if (with_lines) {
-            // 6) Obtention des objets id => { [partners]: lignes_liees[] }
-            console.log("Getting raw lines to insert");
-            const lines = psq.getAllLinesPaired();
-
-            // 7) Insertion des lignes (peut être long)
-            console.log("Inserting raw lines in CouchDB");
-            await registerLines(nn, lines, commander.threads)
-            console.log("Lines has been successfully registered");
-
-            console.log("Flushing PSICQuic object");
-            psq.flushRaw();
-        }
-
-        http.globalAgent.maxSockets = before_run;
-        console.log("Rebuilding of the database is complete.");
+        await reconstructBDD(CONFIG, with_partners, with_lines, threads);
     }
     
     if (commander.rebuild || commander.rebuildCache) {
@@ -84,70 +34,55 @@ const MAX_TIME = 1000 * 60 * 60 * 24 * CONFIG.max_days_before_renew; // 15 jours
             commander.disableAutomaticRebuild = true;
         }
     
-        // Vérifie que l'espèce existe dans les fichiers homologyTree
-        let files = fs.readdirSync(CONFIG.trees).filter(f => f.match(/\.json$/));
-        if (specie) {
-            const escaped = escapeRegExp(specie);
-            const match = new RegExp("^uniprot_" + escaped + "_homology\\.json$", "i");
-
-            console.log(`Looking for specie "${specie}" into "${CONFIG.trees}".`)
-            const tree = files.find(e => match.test(e));
-            if (!tree) {
-                // aucune espèce ne correspond
-                console.error(`Any specie has matched "${specie}" while searching for homology trees. Exiting.`);
-                process.exit(1);
-            }
-
-            files = [tree];
-        }
-
-        await rebuildTreesFrom(CONFIG, files);
+        await rebuildAllCache(CONFIG, specie);
     }
 
     if (!commander.disableAutomaticRebuild) {
-        let tree_files = fs.readdirSync(CONFIG.trees).filter(f => f.match(/\.json$/));
-        let files = fs.readdirSync(CONFIG.cache).filter(f => f.match(/\.topology$/));
-
-        // Recherche des arbres qui n'existent pas dans le cache (donc à construire)
-        tree_files = tree_files.filter(f => !files.includes(f.replace('.json', '.topology')));
-        const missing = tree_files.length;
-
-        // Recherche des fichiers .topology à actualiser
-        files = files
-            .map(f => [f, fs.statSync(CONFIG.cache + f).mtime]) // Recherche le mtime de chaque fichier et renvoie un [name, date]
-            .filter(f => (f[1] as Date).getTime() < (Date.now() - MAX_TIME)) // Gare si date_fichier < actuelle - temps max (temps max dépassé)
-            .map(f => f[0] as string) // Renvoie uniquement le nom du fichier
-            .map(f => f.replace('.topology', '.json')) // Transforme les fichiers *.topology en *.json
-            .filter(f => { // Vérifie si le fichier associé existe
-                if (!fs.existsSync(CONFIG.trees + f)) {
-                    console.error(`File ${f} does not exists when rebuilding from cache. Has ${f.replace('.json', '.topology')} related tree changed name ?`);
-                    
-                    return false;
-                }
-
-                return true;
-            });
-        const outdated = files.length;
-
-        files.push(...tree_files);
-
-        if (files.length > 0) {
-            console.log(`${missing} missing tree${missing > 1 ? 's' : ''} in cache, ${outdated} outdated tree${outdated > 1 ? 's' : ''} has been detected. (Re)building...\n`);
-            await rebuildTreesFrom(CONFIG, files);
-        }
+        await automaticCacheBuild(CONFIG);
     }
 
     // Now, listen to queries !
     const app = express();
-    const trees_cache: { [treeKey: string]: string } = {};
+    // Instanciate a anon class
+    const trees_cache = new class {
+        protected data: {[treeName: string]: string} = {};
+        protected insertion_order: string[] = [];
+
+        constructor(protected threshold = 5) { }
+
+        get(n: string) {
+            return this.data[n];
+        }
+
+        has(n: string) {
+            return n in this.data;
+        }
+
+        set(n: string, data: string) {
+            if (!this.has(n)) {
+                this.insertion_order.push(n);
+
+                if (this.length >= this.threshold) {
+                    const first_inserted = this.insertion_order.shift();
+                    delete this.data[first_inserted];
+                }
+            }
+
+            this.data[n] = data;
+        }
+
+        get length() {
+            return Object.keys(this.data).length;
+        }
+    };
 
     app.get('/tree/:name', (req, res) => {
         const name = req.params.name as string;
 
         // Recheche si l'arbre existe en cache
-        if (name in trees_cache) {
+        if (trees_cache.has(name)) {
             res.setHeader('Content-Type', 'application/json');
-            res.send(trees_cache[name]);
+            res.send(trees_cache.get(name));
         }
         else {
             // Récupère le fichier
@@ -160,9 +95,9 @@ const MAX_TIME = 1000 * 60 * 60 * 24 * CONFIG.max_days_before_renew; // 15 jours
                             res.status(500).send();
                         }
                         else {
-                            trees_cache[name] = data;
+                            trees_cache.set(name, data);
                             res.setHeader('Content-Type', 'application/json');
-                            res.send(trees_cache[name]);
+                            res.send(trees_cache.get(name));
                         }
                     })
                 }
