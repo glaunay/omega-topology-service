@@ -24,9 +24,7 @@
       "esModuleInterop": true
     },
     "files": [ // path to the files to compile
-        "./ts/src/cli.ts",
-        "./ts/src/index.ts",
-        "./ts/src/helpers.ts"
+        "./ts/src/cli.ts"
     ],
     "exclude": [
       // "../taskobject"
