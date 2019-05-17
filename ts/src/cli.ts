@@ -3,10 +3,7 @@ import commander from 'commander';
 import fs from 'fs';
 import nano from 'nano';
 import http from 'http';
-import HomologyTree from './HomologyTree';
-import OmegaTopology from './OmegaTopology';
-import ProgressBar from 'progress';
-import { escapeRegExp, renewDatabase, registerPairs, registerLines } from './helpers';
+import { escapeRegExp, renewDatabase, registerPairs, registerLines, Config, rebuildTreesFrom } from './helpers';
 
 // const file = "/Users/lberanger/dataOmega/mitab200K.mitab"; // merged_uniprot_safe.mitab
 
@@ -35,9 +32,12 @@ commander
     .option('-l, --only-lines', 'Rebuild only stored lines from mitab. Ignore the interactors couples.')
     .option('-t, --threads <number>', 'Number of simultenous request to database when constructing from mitab.', parseInt, 100)
     .option('-c, --rebuild-cache <specie>', 'Rebuild OMTree cache. Specify "all" for rebuilding all the cache.')
+    .option('-d, --disable-automatic-rebuild', 'Disable the automatic check of the old cached topologies to rebuild')
 .parse(process.argv);
 
-const CONFIG = JSON.parse(fs.readFileSync('config.json', { encoding: "utf-8" })) as { trees: string, mitab: string, couchdb: string, cache: string };
+const MAX_TIME = 1000 * 60 * 60 * 24 * 15; // 15 jours 
+
+const CONFIG = JSON.parse(fs.readFileSync('config.json', { encoding: "utf-8" })) as Config;
 
 (async () => {
     // Main process
@@ -100,6 +100,7 @@ const CONFIG = JSON.parse(fs.readFileSync('config.json', { encoding: "utf-8" }))
     
         if (specie === "all") {
             specie = "";
+            commander.disableAutomaticRebuild = true;
         }
     
         // Vérifie que l'espèce existe dans les fichiers homologyTree
@@ -119,46 +120,39 @@ const CONFIG = JSON.parse(fs.readFileSync('config.json', { encoding: "utf-8" }))
             files = [tree];
         }
 
-        // Lecture des fichiers d'arbre à construire
-        const topologies: OmegaTopology[] = [];
-        for (const f of files) {
-            console.log("Reading", f);
-            const this_tree = new HomologyTree(CONFIG.trees + "/" + f);
-            await this_tree.init();
-            topologies.push(new OmegaTopology(this_tree));
+        await rebuildTreesFrom(CONFIG, files);
+    }
+
+    if (!commander.disableAutomaticRebuild) {
+        let tree_files = fs.readdirSync(CONFIG.trees).filter(f => f.match(/\.json$/));
+        let files = fs.readdirSync(CONFIG.cache).filter(f => f.match(/\.topology$/));
+
+        // Recherche des arbres qui n'existent pas dans le cache (donc à construire)
+        tree_files = tree_files.filter(f => !files.includes(f.replace('.json', '.topology')));
+        const missing = tree_files.length;
+
+        // Recherche des fichiers .topology à actualiser
+        files = files
+            .map(f => [f, fs.statSync(CONFIG.cache + f).mtime]) // Recherche le mtime de chaque fichier et renvoie un [name, date]
+            .filter(f => (f[1] as Date).getTime() < (Date.now() - MAX_TIME)) // Gare si date_fichier < actuelle - temps max (temps max dépassé)
+            .map(f => f[0] as string) // Renvoie uniquement le nom du fichier
+            .map(f => f.replace('.topology', '.json')) // Transforme les fichiers *.topology en *.json
+            .filter(f => { // Vérifie si le fichier associé existe
+                if (!fs.existsSync(CONFIG.trees + f)) {
+                    console.error(`File ${f} does not exists when rebuilding from cache. Has ${f.replace('.json', '.topology')} related tree changed name ?`);
+                    
+                    return false;
+                }
+
+                return true;
+            });
+        const outdated = files.length;
+
+        files.push(...tree_files);
+
+        if (files.length > 0) {
+            console.log(`${missing} missing tree${missing > 1 ? 's' : ''} in cache, ${outdated} outdated tree${outdated > 1 ? 's' : ''} has been detected. (Re)building...\n`);
+            await rebuildTreesFrom(CONFIG, files);
         }
-
-        console.log("Trees has been read, constructing graphes.\n");
-
-        const total_length = topologies.reduce((previous, current) => {
-            return previous + current.hDataLength;
-        }, 0);
-
-        const bar = new ProgressBar(":tree: :current partners of :total completed (:percent, :etas remaining)", total_length);
-        let i = 0;
-        for (const t of topologies) {
-            bar.tick(0, { tree: `Constructing ${files[i]}` });
-            i++;
-
-            await t.init();
-
-            await t.buildEdgesReverse(bar);
-
-            t.definitiveTrim(30, 20, 30);
-        }
-
-        bar.terminate();
-
-        console.log("Saving trees to cache.");
-        i = 0;
-        for (const t of topologies) {
-            const filename = files[i].replace('.json', '.topology');
-            fs.writeFileSync(CONFIG.cache + filename, t.serialize(false));
-
-            console.log(`${files[i]}'s tree cache has been saved.`);
-            i++;
-        }
-
-        console.log("Trees has been rebuilt.");
     }
 })();

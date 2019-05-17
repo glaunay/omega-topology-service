@@ -5,6 +5,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const fs_1 = __importDefault(require("fs"));
 const progress_1 = __importDefault(require("progress"));
+const HomologyTree_1 = __importDefault(require("./HomologyTree"));
+const OmegaTopology_1 = __importDefault(require("./OmegaTopology"));
 /**
  * Create a new set that contains elements contained in current set and given set
  */
@@ -34,8 +36,38 @@ function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
 }
 exports.escapeRegExp = escapeRegExp;
-function rebuildTreesFrom(files) {
-    for (const f of files) { }
+async function rebuildTreesFrom(CONFIG, files) {
+    // Lecture des fichiers d'arbre à construire
+    const topologies = [];
+    for (const f of files) {
+        console.log("Reading", f);
+        const this_tree = new HomologyTree_1.default(CONFIG.trees + f);
+        await this_tree.init();
+        topologies.push(new OmegaTopology_1.default(this_tree));
+    }
+    console.log("Trees has been read, constructing graphes.\n");
+    const total_length = topologies.reduce((previous, current) => {
+        return previous + current.hDataLength;
+    }, 0);
+    const bar = new progress_1.default(":tree: :current partners of :total completed (:percent, :etas remaining)", total_length);
+    let i = 0;
+    for (const t of topologies) {
+        bar.tick(0, { tree: `Constructing ${files[i]}` });
+        i++;
+        await t.init();
+        await t.buildEdgesReverse(bar);
+        t.definitiveTrim(30, 20, 30);
+    }
+    bar.terminate();
+    console.log("Saving trees to cache.");
+    i = 0;
+    for (const t of topologies) {
+        const filename = files[i].replace('.json', '.topology');
+        fs_1.default.writeFileSync(CONFIG.cache + filename, t.serialize(false));
+        console.log(`${files[i]}'s tree cache has been saved.`);
+        i++;
+    }
+    console.log("Trees has been rebuilt.");
 }
 exports.rebuildTreesFrom = rebuildTreesFrom;
 async function renewDatabase(nn, renew_partners, renew_lines) {
