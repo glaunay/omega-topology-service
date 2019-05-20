@@ -65,6 +65,11 @@ const CONFIG = JSON.parse(fs_1.default.readFileSync('config.json', { encoding: "
             return Object.keys(this.data).length;
         }
     };
+    app.use((_, res, next) => {
+        res.header("Access-Control-Allow-Origin", "*");
+        res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+        next();
+    });
     app.get('/tree/:name', (req, res) => {
         const name = req.params.name;
         // Recheche si l'arbre existe en cache
@@ -74,10 +79,11 @@ const CONFIG = JSON.parse(fs_1.default.readFileSync('config.json', { encoding: "
         }
         else {
             // Récupère le fichier
-            const full_name = `uniprot_${name}_homology.json`;
-            fs_1.default.exists(CONFIG.trees + full_name, exists => {
+            const full_name = `uniprot_${name}_homology.topology`;
+            console.log("Getting", CONFIG.cache + full_name);
+            fs_1.default.exists(CONFIG.cache + full_name, exists => {
                 if (exists) {
-                    fs_1.default.readFile(CONFIG.trees + full_name, "utf-8", (err, data) => {
+                    fs_1.default.readFile(CONFIG.cache + full_name, "utf-8", (err, data) => {
                         if (err) {
                             res.status(500).send();
                         }

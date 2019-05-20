@@ -76,6 +76,12 @@ const CONFIG = JSON.parse(fs.readFileSync('config.json', { encoding: "utf-8" }))
         }
     };
 
+    app.use((_, res, next) => {
+        res.header("Access-Control-Allow-Origin", "*");
+        res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+        next();
+    });
+
     app.get('/tree/:name', (req, res) => {
         const name = req.params.name as string;
 
@@ -86,11 +92,12 @@ const CONFIG = JSON.parse(fs.readFileSync('config.json', { encoding: "utf-8" }))
         }
         else {
             // Récupère le fichier
-            const full_name = `uniprot_${name}_homology.json`;
+            const full_name = `uniprot_${name}_homology.topology`;
 
-            fs.exists(CONFIG.trees + full_name, exists => {
+            console.log("Getting", CONFIG.cache + full_name)
+            fs.exists(CONFIG.cache + full_name, exists => {
                 if (exists) {
-                    fs.readFile(CONFIG.trees + full_name, "utf-8", (err, data) => {
+                    fs.readFile(CONFIG.cache + full_name, "utf-8", (err, data) => {
                         if (err) {
                             res.status(500).send();
                         }
