@@ -14,6 +14,7 @@ const fs_1 = __importDefault(require("fs"));
 const http_1 = __importDefault(require("http"));
 const nano_1 = __importDefault(require("nano"));
 const progress_1 = __importDefault(require("progress"));
+const v8_1 = __importDefault(require("v8"));
 const omega_topology_fullstack_1 = __importStar(require("omega-topology-fullstack"));
 /**
  * Escape characters of a regular expression.
@@ -45,14 +46,20 @@ async function rebuildTreesFrom(CONFIG, files) {
     const total_length = topologies.reduce((previous, current) => {
         return previous + current.hDataLength;
     }, 0);
-    const bar = new progress_1.default(":tree: :current partners of :total completed (:percent, :etas remaining)", total_length);
+    const bar = new progress_1.default(":tree: :current/:total completed (:percent, :etas remaining, :elapsed taken)", total_length);
     let i = 0;
     for (const t of topologies) {
         bar.tick(0, { tree: `Constructing ${files[i]}` });
-        i++;
+        const specie_name = /^uniprot_(.*)_homology\.json$/.exec(files[i])[1].toLocaleLowerCase();
         await t.init();
-        await t.buildEdgesReverse(bar);
-        t.definitiveTrim(30, 20, 30);
+        await t.buildEdgesReverse(CONFIG.omegalomodb + "/bulk/" + specie_name, bar);
+        t.trimEdges({
+            idPct: 25,
+            simPct: 32,
+            cvPct: 30,
+            definitive: true
+        });
+        i++;
     }
     bar.terminate();
     console.log("Saving trees to cache.");
@@ -74,11 +81,22 @@ exports.rebuildTreesFrom = rebuildTreesFrom;
  * @param {boolean} renew_lines
  * @returns {Promise<void>}
  */
-async function renewDatabase(nn, renew_partners, renew_lines) {
-    if (renew_partners)
-        await nn.db.destroy("id_map").then(() => nn.db.create("id_map"));
-    if (renew_lines)
-        await nn.db.destroy("interactors").then(() => nn.db.create("interactors"));
+async function renewDatabase(CONFIG, nn, renew_partners, renew_lines) {
+    const databases = await nn.db.list();
+    if (renew_partners) {
+        const filtered = databases.filter(db => db.match(new RegExp("^" + CONFIG.databases.partners + "_")));
+        for (const db of filtered) {
+            // searching bases with partners tag
+            await nn.db.destroy(db);
+        }
+    }
+    if (renew_lines) {
+        const filtered = databases.filter(db => db.match(new RegExp("^" + CONFIG.databases.mitab_lines + "_")));
+        for (const db of filtered) {
+            // searching bases with lines tag
+            await nn.db.destroy(db);
+        }
+    }
 }
 exports.renewDatabase = renewDatabase;
 /**
@@ -88,8 +106,10 @@ exports.renewDatabase = renewDatabase;
  * @param {{ [id: string]: Iterable<string> }} pairs
  * @param {number} [max_paquet=100]
  */
-async function registerPairs(nn, pairs, max_paquet = 100) {
-    const id_db = nn.use("id_map");
+async function registerPairs(CONFIG, specie_name, nn, pairs, max_paquet = 100) {
+    const document_name = CONFIG.databases.partners + "_" + specie_name.toLocaleLowerCase();
+    await nn.db.create(document_name).catch(() => { });
+    const id_db = nn.use(document_name);
     const total = Object.keys(pairs).length;
     const bar = new progress_1.default(':current/:total :bar (:percent, :etas) ', { total, complete: "=", incomplete: " ", head: '>' });
     let promises = [];
@@ -111,8 +131,10 @@ exports.registerPairs = registerPairs;
  * @param {{ [id: string]: { [coupledId: string]: string[] } }} pairs
  * @param {number} [max_paquet=100]
  */
-async function registerLines(nn, pairs, max_paquet = 100) {
-    const interactors = nn.use("interactors");
+async function registerLines(CONFIG, specie_name, nn, pairs, max_paquet = 100) {
+    const document_name = CONFIG.databases.mitab_lines + "_" + specie_name.toLocaleLowerCase();
+    await nn.db.create(document_name).catch(() => { });
+    const interactors = nn.use(document_name);
     const total = Object.keys(pairs).length;
     const bar = new progress_1.default(':current/:total :bar (:percent, :etas) ', { total, complete: "=", incomplete: " ", head: '>' });
     let promises = [];
@@ -144,41 +166,46 @@ exports.registerLines = registerLines;
 async function reconstructBDD(CONFIG, with_partners, with_lines, threads) {
     console.log(`Rebuilding ${with_partners ? "partners" : 'only'} ${with_lines ? (with_partners ? "and " : "") + "lines" : ''}.`);
     const nn = nano_1.default(CONFIG.couchdb);
+    if (v8_1.default.getHeapStatistics().heap_size_limit < 5 * 1024 * 1024 * 1024) {
+        console.error("Allocated memory is too low. Please use --max-old-space-size=8192");
+    }
     // Reconstruction de la base de données
-    // 1) Lecture du mitab entier (CONFIG.mitab)
-    console.log("Reading Mitab file");
-    const psq = new omega_topology_fullstack_1.PSICQuic(undefined, with_lines);
-    let t = Date.now();
-    await psq.read(CONFIG.mitab);
-    console.log("Read completed in ", (Date.now() - t) / 1000, " seconds");
-    // 2) Vidage de l'existant
-    // & 3) Construction des documents (interactors et id_map)
-    console.log("Recreate current database.");
-    await renewDatabase(nn, with_partners, with_lines);
     const before_run = http_1.default.globalAgent.maxSockets;
     http_1.default.globalAgent.maxSockets = 200;
-    if (with_partners) {
-        // 4) Obtention des paires id => partners[]
-        console.log("Getting partners");
-        const pairs = psq.getAllPartnersPairs();
-        // 5) Insertion des paires (peut être long)
-        console.log("Inserting interactors partners in CouchDB");
-        await registerPairs(nn, pairs, threads);
-        console.log("Pairs has been successfully registered");
-    }
-    if (with_lines) {
-        // 6) Obtention des objets id => { [partners]: lignes_liees[] }
-        console.log("Getting raw lines to insert");
-        const lines = psq.getAllLinesPaired();
-        // 7) Insertion des lignes (peut être long)
-        console.log("Inserting raw lines in CouchDB");
-        await registerLines(nn, lines, threads);
-        console.log("Lines has been successfully registered");
-        console.log("Flushing PSICQuic object");
-        psq.flushRaw();
+    for (const specie_name in CONFIG.mitab_files) {
+        // 1) Lecture du mitab entier (CONFIG.mitab)
+        console.log("Reading Mitab file for " + specie_name);
+        const psq = new omega_topology_fullstack_1.PSICQuic(undefined, with_lines);
+        let t = Date.now();
+        await psq.read(CONFIG.mitab + "/" + CONFIG.mitab_files[specie_name]);
+        console.log("Read completed in ", (Date.now() - t) / 1000, " seconds");
+        // 2) Vidage de l'existant
+        // & 3) Construction des documents (interactors et id_map)
+        console.log("Recreate current database.");
+        await renewDatabase(CONFIG, nn, with_partners, with_lines);
+        if (with_partners) {
+            // 4) Obtention des paires id => partners[]
+            console.log("Getting partners");
+            const pairs = psq.getAllPartnersPairs();
+            // 5) Insertion des paires (peut être long)
+            console.log("Inserting interactors partners in CouchDB");
+            await registerPairs(CONFIG, specie_name, nn, pairs, threads);
+            console.log("Pairs has been successfully registered");
+        }
+        if (with_lines) {
+            // 6) Obtention des objets id => { [partners]: lignes_liees[] }
+            console.log("Getting raw lines to insert");
+            const lines = psq.getAllLinesPaired();
+            // 7) Insertion des lignes (peut être long)
+            console.log("Inserting raw lines in CouchDB");
+            await registerLines(CONFIG, specie_name, nn, lines, threads);
+            console.log("Lines has been successfully registered");
+            console.log("Flushing PSICQuic object");
+            psq.flushRaw();
+        }
+        console.log(`Rebuilding of the database is complete for ${specie_name}.`);
     }
     http_1.default.globalAgent.maxSockets = before_run;
-    console.log("Rebuilding of the database is complete.");
 }
 exports.reconstructBDD = reconstructBDD;
 /**

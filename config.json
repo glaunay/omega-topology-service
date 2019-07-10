@@ -1,7 +1,15 @@
 {
     "trees": "./source/homology/",
-    "mitab": "./source/mitab/merged_uniprot_safe.mitab",
+    "mitab": "./source/mitab",
+    "mitab_files": {
+        "r6": "merged_uniprot_safe.mitab"
+    },
     "couchdb": "http://localhost:5984",
+    "omegalomodb": "http://localhost:3280",
     "cache": "./cache/",
-    "max_days_before_renew": 15
+    "max_days_before_renew": 15,
+    "databases": {
+        "partners": "id_map",
+        "mitab_lines": "interactors"
+    }
 }
