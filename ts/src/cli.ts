@@ -120,7 +120,7 @@ const CONFIG = JSON.parse(fs.readFileSync('config.json', { encoding: "utf-8" }))
         }
     });
 
-    app.listen(commander.port, () => {
+    app.listen(commander.port, '0.0.0.0', () => {
         console.log(`Omega topology service listening on port ${commander.port}.`);
     });
 })();
