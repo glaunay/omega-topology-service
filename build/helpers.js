@@ -50,7 +50,6 @@ async function rebuildTreesFrom(CONFIG, files) {
     let i = 0;
     for (const t of topologies) {
         bar.tick(0, { tree: `Constructing ${files[i]}` });
-        const specie_name = /^uniprot_(.*)_homology\.json$/.exec(files[i])[1].toLocaleLowerCase();
         await t.init();
         await t.buildEdgesReverse(CONFIG.omegalomodb + "/bulk", bar);
         t.trimEdges({
