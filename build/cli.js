@@ -75,7 +75,7 @@ const CONFIG = JSON.parse(fs_1.default.readFileSync('config.json', { encoding: "
         next();
     });
     app.get('/tree/:name', (req, res) => {
-        const name = req.params.name;
+        const name = req.params.name.toLocaleUpperCase();
         // Recheche si l'arbre existe en cache
         if (trees_cache.has(name)) {
             res.setHeader('Content-Type', 'application/json');
