@@ -6,12 +6,12 @@ import { Config, reconstructBDD, automaticCacheBuild, rebuildAllCache } from './
 commander
     .option('-r, --rebuild <specie>', 'Rebuild partners from mitab & OMTree cache. Specify "all" for rebuilding all trees.')
     .option('-i, --only-interactors', 'Rebuild only interactors couples from mitab. Ignore the mitab full lines.')
+    .option('-q, --quit-after-build', 'After rebuild, do not enable server and quit instead', false)
     .option('-l, --only-lines', 'Rebuild only stored lines from mitab. Ignore the interactors couples.')
     .option('-t, --threads <number>', 'Number of simultenous request to database when constructing from mitab.', Number, 100)
     .option('-c, --rebuild-cache <specie>', 'Rebuild OMTree cache. Specify "all" for rebuilding all the cache.')
     .option('-d, --disable-automatic-rebuild', 'Disable the automatic check of the old cached topologies to rebuild')
     .option('-p, --port <listenPort>', 'Port to open for listening to queries', Number, 3455)
-    .option('-n, --no-serve', 'After rebuild, do not enable server and quit instead')
 .parse(process.argv);
 
 
@@ -42,7 +42,7 @@ const CONFIG = JSON.parse(fs.readFileSync('config.json', { encoding: "utf-8" }))
         await automaticCacheBuild(CONFIG);
     }
 
-    if (commander.noServe) {
+    if (commander.quitAfterBuild) {
         return;
     }
 
