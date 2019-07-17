@@ -8,9 +8,6 @@ import OmegaTopology, { HomologyTree, PSICQuic } from 'omega-topology-fullstack'
 export interface Config {
     trees: string, 
     mitab: string, 
-    mitab_files: { 
-        [specieName: string]: string 
-    }, 
     couchdb: string, 
     cache: string, 
     max_days_before_renew: number, 
@@ -64,13 +61,14 @@ export async function rebuildTreesFrom(CONFIG: Config, files: string[]) : Promis
 
         await t.init();
 
-        await t.buildEdgesReverse(CONFIG.omegalomodb + "/bulk/" + specie_name, bar);
+        await t.buildEdgesReverse(CONFIG.omegalomodb + "/bulk", bar);
 
         t.trimEdges({
             idPct: 25,
             simPct: 32,
             cvPct: 30,
-            definitive: true
+            definitive: true,
+            destroy_identical: true
         });
 
         i++;
@@ -80,6 +78,8 @@ export async function rebuildTreesFrom(CONFIG: Config, files: string[]) : Promis
 
     console.log("Saving trees to cache.");
     i = 0;
+    try { fs.mkdirSync(CONFIG.cache) } catch (e) { }
+
     for (const t of topologies) {
         const filename = files[i].replace('.json', '.topology');
         fs.writeFileSync(CONFIG.cache + filename, t.serialize(false));
@@ -100,23 +100,11 @@ export async function rebuildTreesFrom(CONFIG: Config, files: string[]) : Promis
  * @returns {Promise<void>}
  */
 export async function renewDatabase(CONFIG: Config, nn: nano.ServerScope, renew_partners: boolean, renew_lines: boolean) : Promise<void> {
-    const databases = await nn.db.list();
-
     if (renew_partners) {
-        const filtered = databases.filter(db => db.match(new RegExp("^" + CONFIG.databases.partners + "_")));
-
-        for (const db of filtered) {
-            // searching bases with partners tag
-            await nn.db.destroy(db);
-        }
+        await nn.db.destroy(CONFIG.databases.partners).catch(() => {});
     }
     if (renew_lines) {
-        const filtered = databases.filter(db => db.match(new RegExp("^" + CONFIG.databases.mitab_lines + "_")));
-
-        for (const db of filtered) {
-            // searching bases with lines tag
-            await nn.db.destroy(db);
-        }
+        await nn.db.destroy(CONFIG.databases.mitab_lines).catch(() => {});
     } 
 }
 
@@ -127,8 +115,8 @@ export async function renewDatabase(CONFIG: Config, nn: nano.ServerScope, renew_
  * @param {{ [id: string]: Iterable<string> }} pairs
  * @param {number} [max_paquet=100]
  */
-export async function registerPairs(CONFIG: Config, specie_name: string, nn: nano.ServerScope, pairs: { [id: string]: Iterable<string> }, max_paquet = 100) {
-    const document_name = CONFIG.databases.partners + "_" + specie_name.toLocaleLowerCase();
+export async function registerPairs(CONFIG: Config, nn: nano.ServerScope, pairs: { [id: string]: Iterable<string> }, max_paquet = 100) {
+    const document_name = CONFIG.databases.partners;
 
     await nn.db.create(document_name).catch(() => {});
 
@@ -139,6 +127,9 @@ export async function registerPairs(CONFIG: Config, specie_name: string, nn: nan
     const bar = new ProgressBar(':current/:total :bar (:percent, :etas) ', { total, complete: "=", incomplete: " ", head: '>' });
 
     let promises: Promise<any>[] = [];
+
+    const try_once = id => id_db.insert({ partners: pairs[id] } as MaybeDocument, id).then(() => bar.tick());
+
     for (const id in pairs) {
         if (promises.length >= max_paquet) {
             await Promise.all(promises);
@@ -147,7 +138,7 @@ export async function registerPairs(CONFIG: Config, specie_name: string, nn: nan
         }
 
         promises.push(
-            id_db.insert({ partners: pairs[id] } as MaybeDocument, id).then(() => bar.tick())
+            try_once(id).catch(() => (new Promise(resolve => setTimeout(resolve, 50))).then(() => try_once))
         );
     }
 
@@ -162,8 +153,8 @@ export async function registerPairs(CONFIG: Config, specie_name: string, nn: nan
  * @param {{ [id: string]: { [coupledId: string]: string[] } }} pairs
  * @param {number} [max_paquet=100]
  */
-export async function registerLines(CONFIG: Config, specie_name: string, nn: nano.ServerScope, pairs: { [id: string]: { [coupledId: string]: string[] } }, max_paquet = 100) {
-    const document_name = CONFIG.databases.mitab_lines + "_" + specie_name.toLocaleLowerCase();
+export async function registerLines(CONFIG: Config, nn: nano.ServerScope, pairs: { [id: string]: { [coupledId: string]: string[] } }, max_paquet = 100) {
+    const document_name = CONFIG.databases.mitab_lines;
 
     await nn.db.create(document_name).catch(() => {});
 
@@ -217,46 +208,46 @@ export async function reconstructBDD(CONFIG: Config, with_partners: boolean, wit
     const before_run = http.globalAgent.maxSockets;
     http.globalAgent.maxSockets = 200;
 
-    for (const specie_name in CONFIG.mitab_files) {
-        // 1) Lecture du mitab entier (CONFIG.mitab)
-        console.log("Reading Mitab file for " + specie_name);
-        const psq = new PSICQuic(undefined, with_lines);
-        let t = Date.now();
-        await psq.read(CONFIG.mitab + "/" + CONFIG.mitab_files[specie_name]);
-        console.log("Read completed in ", (Date.now() - t) / 1000, " seconds");
+    // 1) Lecture du mitab entier (CONFIG.mitab)
+    console.log("Reading global Mitab file");
 
-        // 2) Vidage de l'existant
-        // & 3) Construction des documents (interactors et id_map)
-        console.log("Recreate current database.");
-        await renewDatabase(CONFIG, nn, with_partners, with_lines);
+    ////// TODO TOCHANGE : En stream, sans objet PSICQuic
+    const psq = new PSICQuic(undefined, with_lines);
+    let t = Date.now();
+    await psq.read(CONFIG.mitab);
+    console.log("Read completed in ", (Date.now() - t) / 1000, " seconds");
 
-        if (with_partners) {
-            // 4) Obtention des paires id => partners[]
-            console.log("Getting partners");
-            const pairs = psq.getAllPartnersPairs();
+    // 2) Vidage de l'existant
+    // & 3) Construction des documents (interactors et id_map)
+    console.log("Recreate current database.");
+    await renewDatabase(CONFIG, nn, with_partners, with_lines);
 
-            // 5) Insertion des paires (peut être long)
-            console.log("Inserting interactors partners in CouchDB");
-            await registerPairs(CONFIG, specie_name, nn, pairs, threads);
-            console.log("Pairs has been successfully registered")
-        }
+    if (with_partners) {
+        // 4) Obtention des paires id => partners[]
+        console.log("Getting partners");
+        const pairs = psq.getAllPartnersPairs();
 
-        if (with_lines) {
-            // 6) Obtention des objets id => { [partners]: lignes_liees[] }
-            console.log("Getting raw lines to insert");
-            const lines = psq.getAllLinesPaired();
-
-            // 7) Insertion des lignes (peut être long)
-            console.log("Inserting raw lines in CouchDB");
-            await registerLines(CONFIG, specie_name, nn, lines, threads)
-            console.log("Lines has been successfully registered");
-
-            console.log("Flushing PSICQuic object");
-            psq.flushRaw();
-        }
-
-        console.log(`Rebuilding of the database is complete for ${specie_name}.`);
+        // 5) Insertion des paires (peut être long)
+        console.log("Inserting interactors partners in CouchDB");
+        await registerPairs(CONFIG, nn, pairs, threads);
+        console.log("Pairs has been successfully registered")
     }
+
+    if (with_lines) {
+        // 6) Obtention des objets id => { [partners]: lignes_liees[] }
+        console.log("Getting raw lines to insert");
+        const lines = psq.getAllLinesPaired();
+
+        // 7) Insertion des lignes (peut être long)
+        console.log("Inserting raw lines in CouchDB");
+        await registerLines(CONFIG, nn, lines, threads)
+        console.log("Lines has been successfully registered");
+
+        console.log("Flushing PSICQuic object");
+        psq.flushRaw();
+    }
+
+    console.log(`Rebuilding of the database is complete.`);
     
     http.globalAgent.maxSockets = before_run;
 }
@@ -295,6 +286,8 @@ export async function rebuildAllCache(CONFIG: Config, specie?: string) {
  */
 export async function automaticCacheBuild(CONFIG: Config) {
     const MAX_TIME = 1000 * 60 * 60 * 24 * CONFIG.max_days_before_renew; // 15 jours par défaut
+
+    try { fs.mkdirSync(CONFIG.cache) } catch (e) { }
 
     let tree_files = fs.readdirSync(CONFIG.trees).filter(f => f.match(/\.json$/));
     let files = fs.readdirSync(CONFIG.cache).filter(f => f.match(/\.topology$/));

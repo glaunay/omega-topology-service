@@ -11,6 +11,7 @@ commander
     .option('-c, --rebuild-cache <specie>', 'Rebuild OMTree cache. Specify "all" for rebuilding all the cache.')
     .option('-d, --disable-automatic-rebuild', 'Disable the automatic check of the old cached topologies to rebuild')
     .option('-p, --port <listenPort>', 'Port to open for listening to queries', parseInt, 3455)
+    .option('-n, --no-serve', 'After rebuild, do not enable server and quit instead')
 .parse(process.argv);
 
 
@@ -39,6 +40,10 @@ const CONFIG = JSON.parse(fs.readFileSync('config.json', { encoding: "utf-8" }))
 
     if (!commander.disableAutomaticRebuild) {
         await automaticCacheBuild(CONFIG);
+    }
+
+    if (commander.noServe) {
+        return;
     }
 
     // Now, listen to queries !

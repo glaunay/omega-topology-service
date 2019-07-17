@@ -15,6 +15,7 @@ commander_1.default
     .option('-c, --rebuild-cache <specie>', 'Rebuild OMTree cache. Specify "all" for rebuilding all the cache.')
     .option('-d, --disable-automatic-rebuild', 'Disable the automatic check of the old cached topologies to rebuild')
     .option('-p, --port <listenPort>', 'Port to open for listening to queries', parseInt, 3455)
+    .option('-n, --no-serve', 'After rebuild, do not enable server and quit instead')
     .parse(process.argv);
 const CONFIG = JSON.parse(fs_1.default.readFileSync('config.json', { encoding: "utf-8" }));
 (async () => {
@@ -35,6 +36,9 @@ const CONFIG = JSON.parse(fs_1.default.readFileSync('config.json', { encoding: "
     }
     if (!commander_1.default.disableAutomaticRebuild) {
         await helpers_1.automaticCacheBuild(CONFIG);
+    }
+    if (commander_1.default.noServe) {
+        return;
     }
     // Now, listen to queries !
     const app = express_1.default();
