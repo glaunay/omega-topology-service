@@ -10,7 +10,7 @@ const helpers_1 = require("./helpers");
 commander_1.default
     .option('-r, --rebuild <specie>', 'Rebuild partners from mitab & OMTree cache. Specify "all" for rebuilding all trees.')
     .option('-i, --only-interactors', 'Rebuild only interactors couples from mitab. Ignore the mitab full lines.')
-    .option('-q, --quit-after-build', 'After rebuild, do not enable server and quit instead', false)
+    .option('-n, --no-serve', 'After rebuild, do not enable server and quit instead', false)
     .option('-l, --only-lines', 'Rebuild only stored lines from mitab. Ignore the interactors couples.')
     .option('-t, --threads <number>', 'Number of simultenous request to database when constructing from mitab.', Number, 100)
     .option('-c, --rebuild-cache <specie>', 'Rebuild OMTree cache. Specify "all" for rebuilding all the cache.')
@@ -37,7 +37,7 @@ const CONFIG = JSON.parse(fs_1.default.readFileSync('config.json', { encoding: "
     if (!commander_1.default.disableAutomaticRebuild) {
         await helpers_1.automaticCacheBuild(CONFIG);
     }
-    if (commander_1.default.quitAfterBuild) {
+    if (!commander_1.default.serve) {
         return;
     }
     // Now, listen to queries !
