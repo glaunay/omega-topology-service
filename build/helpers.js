@@ -114,7 +114,7 @@ async function registerPairs(CONFIG, nn, pairs, max_paquet = 100) {
             await Promise.all(promises);
             promises = [];
         }
-        promises.push(try_once(id).catch(() => (new Promise(resolve => setTimeout(resolve, 50))).then(() => try_once)));
+        promises.push(try_once(id).catch(() => (new Promise(resolve => setTimeout(resolve, 50))).then(() => try_once)).catch(e => console.warn("Could not insert a line.", e)));
     }
     await Promise.all(promises);
     bar.terminate();
@@ -144,7 +144,8 @@ async function registerLines(CONFIG, nn, pairs, max_paquet = 100) {
             // console.warn("DB error:", err);
             // Attendre
             return new Promise(resolve => setTimeout(resolve, 500))
-                .then(() => { console.log("Reinserting"); return interactors.insert({ data: pairs[id] }, id).then(() => bar.tick()); });
+                .then(() => interactors.insert({ data: pairs[id] }, id).then(() => bar.tick()))
+                .catch(e => console.warn("Could not insert a line.", e));
         }));
     }
     await Promise.all(promises);

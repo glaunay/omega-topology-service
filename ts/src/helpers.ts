@@ -136,7 +136,7 @@ export async function registerPairs(CONFIG: Config, nn: nano.ServerScope, pairs:
         }
 
         promises.push(
-            try_once(id).catch(() => (new Promise(resolve => setTimeout(resolve, 50))).then(() => try_once))
+            try_once(id).catch(() => (new Promise(resolve => setTimeout(resolve, 50))).then(() => try_once)).catch(e => console.warn("Could not insert a line.", e))
         );
     }
 
@@ -176,7 +176,8 @@ export async function registerLines(CONFIG: Config, nn: nano.ServerScope, pairs:
                 // console.warn("DB error:", err);
                 // Attendre
                 return new Promise(resolve => setTimeout(resolve, 500))
-                    .then(() => { console.log("Reinserting"); return interactors.insert({ data: pairs[id] } as MaybeDocument, id).then(() => bar.tick()) })
+                    .then(() => interactors.insert({ data: pairs[id] } as MaybeDocument, id).then(() => bar.tick()))
+                    .catch(e => console.warn("Could not insert a line.", e))
             })
         );
     }
