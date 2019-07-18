@@ -172,8 +172,8 @@ export async function registerLines(CONFIG: Config, nn: nano.ServerScope, pairs:
         let p = interactors.insert({ data: pairs[id] } as MaybeDocument, id).then(() => bar.tick());
 
         promises.push(
-            p.catch(err => {
-                console.warn("DB error:", err);
+            p.catch(() => {
+                // console.warn("DB error:", err);
                 // Attendre
                 return new Promise(resolve => setTimeout(resolve, 500))
                     .then(() => { console.log("Reinserting"); return interactors.insert({ data: pairs[id] } as MaybeDocument, id).then(() => bar.tick()) })

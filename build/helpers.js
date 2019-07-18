@@ -140,8 +140,8 @@ async function registerLines(CONFIG, nn, pairs, max_paquet = 100) {
             promises = [];
         }
         let p = interactors.insert({ data: pairs[id] }, id).then(() => bar.tick());
-        promises.push(p.catch(err => {
-            console.warn("DB error:", err);
+        promises.push(p.catch(() => {
+            // console.warn("DB error:", err);
             // Attendre
             return new Promise(resolve => setTimeout(resolve, 500))
                 .then(() => { console.log("Reinserting"); return interactors.insert({ data: pairs[id] }, id).then(() => bar.tick()); });
