@@ -25,6 +25,8 @@ Just unzip it into root directory.
 unzip source.zip
 ```
 
+You can now jump to [Usage](#usa) step.
+
 ---
 ### If you already have desired homology data and the MI Tab file
 
@@ -128,7 +130,7 @@ interface Config {
 }
 ```
 
-## Usage
+## <a id="usa"></a> Usage
 
 ### Setup database and cache
 
