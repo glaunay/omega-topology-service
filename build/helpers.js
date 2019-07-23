@@ -16,6 +16,7 @@ const nano_1 = __importDefault(require("nano"));
 const progress_1 = __importDefault(require("progress"));
 const v8_1 = __importDefault(require("v8"));
 const omega_topology_fullstack_1 = __importStar(require("omega-topology-fullstack"));
+const logger_1 = __importDefault(require("./logger"));
 /**
  * Escape characters of a regular expression.
  *
@@ -37,32 +38,33 @@ async function rebuildTreesFrom(CONFIG, files) {
     // Lecture des fichiers d'arbre à construire
     const topologies = [];
     for (const f of files) {
-        console.log("Reading", f);
+        logger_1.default.debug("Reading" + f);
         const this_tree = new omega_topology_fullstack_1.HomologyTree(CONFIG.trees + f);
         await this_tree.init();
         topologies.push(new omega_topology_fullstack_1.default(this_tree));
     }
-    console.log("Trees has been read, constructing graphes.\n");
+    logger_1.default.info("Trees has been read, constructing graphes.\n");
     const total_length = topologies.reduce((previous, current) => {
         return previous + current.hDataLength;
     }, 0);
+    let trim_parameters = Object.assign({}, {
+        definitive: true,
+        destroy_identical: true
+    });
+    if (CONFIG.auto_trim) {
+        trim_parameters = { ...CONFIG.auto_trim, ...trim_parameters };
+    }
     const bar = new progress_1.default(":tree: :current/:total completed (:percent, :etas remaining, :elapsed taken)", total_length);
     let i = 0;
     for (const t of topologies) {
         bar.tick(0, { tree: `Constructing ${files[i]}` });
         await t.init();
         await t.buildEdgesReverse(CONFIG.omegalomodb + "/bulk", bar);
-        t.trimEdges({
-            idPct: 25,
-            simPct: 32,
-            cvPct: 30,
-            definitive: true,
-            destroy_identical: true
-        });
+        t.trimEdges(trim_parameters);
         i++;
     }
     bar.terminate();
-    console.log("Saving trees to cache.");
+    logger_1.default.verbose("Saving trees to cache.");
     i = 0;
     try {
         fs_1.default.mkdirSync(CONFIG.cache);
@@ -71,10 +73,10 @@ async function rebuildTreesFrom(CONFIG, files) {
     for (const t of topologies) {
         const filename = files[i].replace('.json', '.topology');
         fs_1.default.writeFileSync(CONFIG.cache + filename, t.serialize(false));
-        console.log(`${files[i]}'s tree cache has been saved.`);
+        logger_1.default.verbose(`${files[i]}'s tree cache has been saved.`);
         i++;
     }
-    console.log("Trees has been rebuilt.");
+    logger_1.default.info("Trees has been rebuilt.");
 }
 exports.rebuildTreesFrom = rebuildTreesFrom;
 /**
@@ -87,9 +89,11 @@ exports.rebuildTreesFrom = rebuildTreesFrom;
  */
 async function renewDatabase(CONFIG, nn, renew_partners, renew_lines) {
     if (renew_partners) {
+        logger_1.default.debug(`Destroying partners database (${CONFIG.databases.partners})`);
         await nn.db.destroy(CONFIG.databases.partners).catch(() => { });
     }
     if (renew_lines) {
+        logger_1.default.debug(`Destroying MI Tab lines database (${CONFIG.databases.mitab_lines})`);
         await nn.db.destroy(CONFIG.databases.mitab_lines).catch(() => { });
     }
 }
@@ -103,9 +107,11 @@ exports.renewDatabase = renewDatabase;
  */
 async function registerPairs(CONFIG, nn, pairs, max_paquet = 100) {
     const document_name = CONFIG.databases.partners;
+    logger_1.default.debug(`Creating database ${document_name}`);
     await nn.db.create(document_name).catch(() => { });
     const id_db = nn.use(document_name);
     const total = Object.keys(pairs).length;
+    logger_1.default.debug(`${total} total pairs to insert`);
     const bar = new progress_1.default(':current/:total :bar (:percent, :etas) ', { total, complete: "=", incomplete: " ", head: '>' });
     let promises = [];
     const try_once = id => id_db.insert({ partners: pairs[id] }, id).then(() => bar.tick());
@@ -114,7 +120,7 @@ async function registerPairs(CONFIG, nn, pairs, max_paquet = 100) {
             await Promise.all(promises);
             promises = [];
         }
-        promises.push(try_once(id).catch(() => (new Promise(resolve => setTimeout(resolve, 50))).then(() => try_once)).catch(e => console.warn("Could not insert a line.", e)));
+        promises.push(try_once(id).catch(() => (new Promise(resolve => setTimeout(resolve, 50))).then(() => try_once)).catch(e => logger_1.default.warn("Could not insert a line.", e)));
     }
     await Promise.all(promises);
     bar.terminate();
@@ -129,9 +135,11 @@ exports.registerPairs = registerPairs;
  */
 async function registerLines(CONFIG, nn, pairs, max_paquet = 100) {
     const document_name = CONFIG.databases.mitab_lines;
+    logger_1.default.debug(`Creating database ${document_name}`);
     await nn.db.create(document_name).catch(() => { });
     const interactors = nn.use(document_name);
     const total = Object.keys(pairs).length;
+    logger_1.default.debug(`${total} total pairs to insert`);
     const bar = new progress_1.default(':current/:total :bar (:percent, :etas) ', { total, complete: "=", incomplete: " ", head: '>' });
     let promises = [];
     for (const id in pairs) {
@@ -141,11 +149,10 @@ async function registerLines(CONFIG, nn, pairs, max_paquet = 100) {
         }
         let p = interactors.insert({ data: pairs[id] }, id).then(() => bar.tick());
         promises.push(p.catch(() => {
-            // console.warn("DB error:", err);
             // Attendre
             return new Promise(resolve => setTimeout(resolve, 500))
                 .then(() => interactors.insert({ data: pairs[id] }, id).then(() => bar.tick()))
-                .catch(e => console.warn("Could not insert a line.", e));
+                .catch(e => logger_1.default.warn("Could not insert a line.", e));
         }));
     }
     await Promise.all(promises);
@@ -161,46 +168,48 @@ exports.registerLines = registerLines;
  * @param {number} threads
  */
 async function reconstructBDD(CONFIG, with_partners, with_lines, threads) {
-    console.log(`Rebuilding ${with_partners ? "partners" : 'only'} ${with_lines ? (with_partners ? "and " : "") + "lines" : ''}.`);
+    logger_1.default.info(`Rebuilding ${with_partners ? "partners" : 'only'} ${with_lines ? (with_partners ? "and " : "") + "lines" : ''}.`);
+    logger_1.default.debug('Creating Nano Couch object');
     const nn = nano_1.default(CONFIG.couchdb);
-    if (v8_1.default.getHeapStatistics().heap_size_limit < 5 * 1024 * 1024 * 1024) {
-        console.error("Allocated memory is too low. Please use --max-old-space-size=8192");
+    const heap_size = v8_1.default.getHeapStatistics().heap_size_limit;
+    if (heap_size < 5 * 1024 * 1024 * 1024) {
+        logger_1.default.error(`Allocated memory is too low (${(heap_size / (1024 * 1024)).toFixed(1)} Mo). Please use --max-old-space-size=8192`);
     }
     // Reconstruction de la base de données
     const before_run = http_1.default.globalAgent.maxSockets;
     http_1.default.globalAgent.maxSockets = 200;
     // 1) Lecture du mitab entier (CONFIG.mitab)
-    console.log("Reading global Mitab file");
+    logger_1.default.info("Reading global Mitab file");
     ////// TODO TOCHANGE : En stream, sans objet PSICQuic
     const psq = new omega_topology_fullstack_1.PSICQuic(undefined, with_lines);
     let t = Date.now();
     await psq.read(CONFIG.mitab);
-    console.log("Read completed in ", (Date.now() - t) / 1000, " seconds");
+    logger_1.default.verbose("Read completed in ", (Date.now() - t) / 1000, " seconds");
     // 2) Vidage de l'existant
     // & 3) Construction des documents (interactors et id_map)
-    console.log("Recreate current database.");
+    logger_1.default.info("Recreate current database.");
     await renewDatabase(CONFIG, nn, with_partners, with_lines);
     if (with_partners) {
         // 4) Obtention des paires id => partners[]
-        console.log("Getting partners");
+        logger_1.default.info("Getting partners");
         const pairs = psq.getAllPartnersPairs();
         // 5) Insertion des paires (peut être long)
-        console.log("Inserting interactors partners in CouchDB");
+        logger_1.default.info("Inserting interactors partners in CouchDB");
         await registerPairs(CONFIG, nn, pairs, threads);
-        console.log("Pairs has been successfully registered");
+        logger_1.default.verbose("Pairs has been successfully registered");
     }
     if (with_lines) {
         // 6) Obtention des objets id => { [partners]: lignes_liees[] }
-        console.log("Getting raw lines to insert");
+        logger_1.default.debug("Getting raw lines to insert");
         const lines = psq.getAllLinesPaired();
         // 7) Insertion des lignes (peut être long)
-        console.log("Inserting raw lines in CouchDB");
+        logger_1.default.info("Inserting raw lines in CouchDB");
         await registerLines(CONFIG, nn, lines, threads);
-        console.log("Lines has been successfully registered");
-        console.log("Flushing PSICQuic object");
+        logger_1.default.verbose("Lines has been successfully registered");
+        logger_1.default.debug("Flushing PSICQuic object");
         psq.flushRaw();
     }
-    console.log(`Rebuilding of the database is complete.`);
+    logger_1.default.info(`Rebuilding of the database is complete.`);
     http_1.default.globalAgent.maxSockets = before_run;
 }
 exports.reconstructBDD = reconstructBDD;
@@ -212,16 +221,17 @@ exports.reconstructBDD = reconstructBDD;
  */
 async function rebuildAllCache(CONFIG, specie) {
     // Vérifie que l'espèce existe dans les fichiers homologyTree
+    logger_1.default.debug(`Searching JSON files in ${CONFIG.trees}`);
     let files = fs_1.default.readdirSync(CONFIG.trees).filter(f => f.match(/\.json$/));
     if (specie) {
         const escaped = escapeRegExp(specie);
         const match = new RegExp("^uniprot_" + escaped + "_homology\\.json$", "i");
-        console.log(`Looking for specie "${specie}" into "${CONFIG.trees}".`);
+        logger_1.default.info(`Looking for specie "${specie}" into "${CONFIG.trees}".`);
         const tree = files.find(e => match.test(e));
         if (!tree) {
             // aucune espèce ne correspond
-            console.error(`Any specie has matched "${specie}" while searching for homology trees. Exiting.`);
-            process.exit(1);
+            logger_1.default.error(`Any specie has matched "${specie}" while searching for homology trees. Exiting.`);
+            return;
         }
         files = [tree];
     }
@@ -239,12 +249,16 @@ async function automaticCacheBuild(CONFIG) {
         fs_1.default.mkdirSync(CONFIG.cache);
     }
     catch (e) { }
+    logger_1.default.debug(`Finding all JSON files in ${CONFIG.trees} and all cache files in ${CONFIG.cache}.`);
     let tree_files = fs_1.default.readdirSync(CONFIG.trees).filter(f => f.match(/\.json$/));
     let files = fs_1.default.readdirSync(CONFIG.cache).filter(f => f.match(/\.topology$/));
     // Recherche des arbres qui n'existent pas dans le cache (donc à construire)
+    logger_1.default.debug(`Searching missing trees in cache...`);
     tree_files = tree_files.filter(f => !files.includes(f.replace('.json', '.topology')));
     const missing = tree_files.length;
+    logger_1.default.debug(`${missing} missing trees`);
     // Recherche des fichiers .topology à actualiser
+    logger_1.default.debug(`Searching outdated cached trees...`);
     files = files
         .map(f => [f, fs_1.default.statSync(CONFIG.cache + f).mtime]) // Recherche le mtime de chaque fichier et renvoie un [name, date]
         .filter(f => f[1].getTime() < (Date.now() - MAX_TIME)) // Gare si date_fichier < actuelle - temps max (temps max dépassé)
@@ -252,7 +266,7 @@ async function automaticCacheBuild(CONFIG) {
         .map(f => f.replace('.topology', '.json')) // Transforme les fichiers *.topology en *.json
         .filter(f => {
         if (!fs_1.default.existsSync(CONFIG.trees + f)) {
-            console.error(`File ${f} does not exists when rebuilding from cache. Has ${f.replace('.json', '.topology')} related tree changed name ?`);
+            logger_1.default.error(`File ${f} does not exists when rebuilding from cache. Has ${f.replace('.json', '.topology')} related tree changed name ?`);
             return false;
         }
         return true;
@@ -260,7 +274,7 @@ async function automaticCacheBuild(CONFIG) {
     const outdated = files.length;
     files.push(...tree_files);
     if (files.length > 0) {
-        console.log(`${missing} missing tree${missing > 1 ? 's' : ''} in cache, ${outdated} outdated tree${outdated > 1 ? 's' : ''} has been detected. (Re)building...\n`);
+        logger_1.default.info(`${missing} missing tree${missing > 1 ? 's' : ''} in cache, ${outdated} outdated tree${outdated > 1 ? 's' : ''} has been detected. (Re)building...\n`);
         await rebuildTreesFrom(CONFIG, files);
     }
 }

@@ -8,5 +8,10 @@
     "databases": {
         "partners": "id_map",
         "mitab_lines": "interactors"
+    },
+    "auto_trim": {
+        "idPct": 25,
+        "simPct": 32,
+        "cvPct": 30
     }
 }
