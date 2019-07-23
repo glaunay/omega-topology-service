@@ -140,16 +140,16 @@ This will build the database, the will construct cache for all species found in 
 ```bash
 # --max-old-space-size=8192 : Allow node to use 8192 Mo of RAM
 # -r all : rebuild all (database + cache) for all species
-# -d : Do not enable server after building
-node --max-old-space-size=8192 build/cli.js -r all -d
+# -n : Do not enable server after building
+node --max-old-space-size=8192 build/cli.js -r all -n
 ```
 
 You can rebuild database then cache for one specific specie (database will *always* be specie-agnostic).
 ```bash
 # --max-old-space-size=8192 : Allow node to use 8192 Mo of RAM
 # -r r6 : rebuild database then the cache for the homology tree of R6
-# -d : Do not enable server after building
-node --max-old-space-size=8192 build/cli.js -r r6 -d
+# -n : Do not enable server after building
+node --max-old-space-size=8192 build/cli.js -r r6 -n
 ```
 
 #### Build cache for a specific specie
