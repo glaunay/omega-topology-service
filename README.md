@@ -170,7 +170,7 @@ Once the cache and database is setted up, you can run `omega-topology-service` b
 node build/cli.js
 ```
 
-You can disable automatic cache rebuild (by default, after 15 days), choose listened port or set a custom log level (default: warn).
+You can disable automatic cache rebuild (by default, after 15 days), choose listened port or set a custom log level (default: info).
 ```bash
 # Set a custom port
 node build/cli.js -p 3823 # Emit on port 3823
