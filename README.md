@@ -42,7 +42,7 @@ Jump to [Initial configuration](#ic) step to learn more about how to obtain the 
 
 To run this service, you need homology informations from the specie of interest.
 
-Lookup to the [Divisome Factory](https://github.com/glaunay/divisomeFactory) pipeline to obtain the JSON homology tree and a filtered MI Tab file.
+Look at the [Divisome Factory](https://github.com/glaunay/divisomeFactory) pipeline to obtain the JSON homology tree and a filtered MI Tab file.
 
 Make sure the specie name inside the filename of the homology file is in uppercase, then you can copy it inside the appropriate directory.
 ```bash
@@ -55,7 +55,7 @@ This script takes all the files to merge in argument and produce a `merged.mitab
 
 ```bash
 # Merge obtained MI Tab with existing MI Tab in source directory
-python3 utils/mitab_merger.py my_mitab.mitab source/mitab/merged_uniprot_safe.mitab
+./utils/mitab_merger.py my_mitab.mitab source/mitab/merged_uniprot_safe.mitab
 
 # Remove the old unmerged
 rm source/mitab/merged_uniprot_safe.mitab
@@ -90,7 +90,7 @@ If you want to change the MI Tab filename, specify its path in the configuration
 
 `omegalomodb` is required in order to run bulked requests in this service. You can configure its address into the configuration file, under the `omegalomodb` key.
 
-Therefore, a direct link to CouchDB is also required, in order to create and fill collections. Address can be found and configurated in the `couchdb` key of the configuration file. 
+Furthermore, a direct link to CouchDB is also required, in order to create and fill collections. Address can be found and configurated in the `couchdb` key of the configuration file. 
 
 ### Configuration file
 
@@ -179,6 +179,8 @@ node build/cli.js -l debug # Emit all messages to console
 # Disable automatic cache rebuild
 node build/cli.js -d
 ```
+
+More parameters are available, all of them is described using the `-h` or `--help` parameter.
 
 ### Requests
 
