@@ -149,7 +149,7 @@ export async function registerPairs(CONFIG: Config, nn: nano.ServerScope, pairs:
 
     const bar = new ProgressBar(':current/:total :bar (:percent, :etas) ', { total, complete: "=", incomplete: " ", head: '>' });
 
-    const create_document = id => { return { partners: pairs[id] } as MaybeDocument };
+    const create_document = id => { return { _id: id, partners: pairs[id] } as MaybeDocument };
     const insert_many = ids => id_db.bulk({ docs: ids.map(id => create_document(id)) });
 
     let ids_to_push = [];
@@ -190,7 +190,7 @@ export async function registerLines(CONFIG: Config, nn: nano.ServerScope, pairs:
 
     const bar = new ProgressBar(':current/:total :bar (:percent, :etas) ', { total, complete: "=", incomplete: " ", head: '>' });
 
-    const create_document = id => { return { data: pairs[id] } as MaybeDocument };
+    const create_document = id => { return { _id: id, data: pairs[id] } as MaybeDocument };
     const insert_many = ids => interactors.bulk({ docs: ids.map(id => create_document(id)) });
 
     let ids_to_push = [];

@@ -113,7 +113,7 @@ async function registerPairs(CONFIG, nn, pairs, max_paquet = 1000) {
     const total = Object.keys(pairs).length;
     logger_1.default.debug(`${total} total pairs to insert`);
     const bar = new progress_1.default(':current/:total :bar (:percent, :etas) ', { total, complete: "=", incomplete: " ", head: '>' });
-    const create_document = id => { return { partners: pairs[id] }; };
+    const create_document = id => { return { _id: id, partners: pairs[id] }; };
     const insert_many = ids => id_db.bulk({ docs: ids.map(id => create_document(id)) });
     let ids_to_push = [];
     for (const id in pairs) {
@@ -144,7 +144,7 @@ async function registerLines(CONFIG, nn, pairs, max_paquet = 100) {
     const total = Object.keys(pairs).length;
     logger_1.default.debug(`${total} total pairs to insert`);
     const bar = new progress_1.default(':current/:total :bar (:percent, :etas) ', { total, complete: "=", incomplete: " ", head: '>' });
-    const create_document = id => { return { data: pairs[id] }; };
+    const create_document = id => { return { _id: id, data: pairs[id] }; };
     const insert_many = ids => interactors.bulk({ docs: ids.map(id => create_document(id)) });
     let ids_to_push = [];
     for (const id in pairs) {
