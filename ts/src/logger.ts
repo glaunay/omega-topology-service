@@ -6,9 +6,6 @@ export const logger = Winston.createLogger({
         new Winston.transports.Console({
             format: Winston.format.combine(
                 Winston.format.colorize(),
-                Winston.format.timestamp({
-                    format: 'YYYY-MM-DD HH:mm:ss'
-                }),
                 Winston.format.errors({ stack: true }),
                 Winston.format.splat(),
                 Winston.format.simple(),
