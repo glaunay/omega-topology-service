@@ -8,9 +8,7 @@ exports.logger = winston_1.default.createLogger({
     level: 'warn',
     transports: [
         new winston_1.default.transports.Console({
-            format: winston_1.default.format.combine(winston_1.default.format.colorize(), winston_1.default.format.timestamp({
-                format: 'YYYY-MM-DD HH:mm:ss'
-            }), winston_1.default.format.errors({ stack: true }), winston_1.default.format.splat(), winston_1.default.format.simple())
+            format: winston_1.default.format.combine(winston_1.default.format.colorize(), winston_1.default.format.errors({ stack: true }), winston_1.default.format.splat(), winston_1.default.format.simple())
         })
     ]
 });
