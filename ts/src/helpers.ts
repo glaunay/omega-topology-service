@@ -165,7 +165,9 @@ export async function registerPairs(CONFIG: Config, nn: nano.ServerScope, pairs:
         }
     }
 
-    await insert_many(ids_to_push);
+    if (ids_to_push.length)
+        await insert_many(ids_to_push);
+
     bar.tick(ids_to_push.length);
     bar.terminate();
 }
@@ -206,7 +208,9 @@ export async function registerLines(CONFIG: Config, nn: nano.ServerScope, pairs:
         }
     }
 
-    await insert_many(ids_to_push);
+    if (ids_to_push.length)
+        await insert_many(ids_to_push);
+
     bar.tick(ids_to_push.length);
     bar.terminate();
 }

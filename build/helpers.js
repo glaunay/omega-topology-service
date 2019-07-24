@@ -124,7 +124,8 @@ async function registerPairs(CONFIG, nn, pairs, max_paquet = 1000) {
             ids_to_push = [];
         }
     }
-    await insert_many(ids_to_push);
+    if (ids_to_push.length)
+        await insert_many(ids_to_push);
     bar.tick(ids_to_push.length);
     bar.terminate();
 }
@@ -155,7 +156,8 @@ async function registerLines(CONFIG, nn, pairs, max_paquet = 100) {
             ids_to_push = [];
         }
     }
-    await insert_many(ids_to_push);
+    if (ids_to_push.length)
+        await insert_many(ids_to_push);
     bar.tick(ids_to_push.length);
     bar.terminate();
 }
