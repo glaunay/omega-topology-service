@@ -114,12 +114,12 @@ async function registerPairs(CONFIG, nn, pairs, max_paquet = 1000) {
     logger_1.default.debug(`${total} total pairs to insert`);
     const bar = new progress_1.default(':current/:total :bar (:percent, :etas) ', { total, complete: "=", incomplete: " ", head: '>' });
     const create_document = id => { return { partners: pairs[id] }; };
-    const insert_many = ids => id_db.bulk(ids.map(id => create_document(id)));
+    const insert_many = ids => id_db.bulk({ docs: ids.map(id => create_document(id)) });
     let ids_to_push = [];
     for (const id in pairs) {
         ids_to_push.push(id);
         if (ids_to_push.length >= max_paquet) {
-            await insert_many({ docs: ids_to_push }).catch(() => insert_many(ids_to_push));
+            await insert_many(ids_to_push).catch(() => insert_many(ids_to_push));
             bar.tick(ids_to_push.length);
             ids_to_push = [];
         }
@@ -145,12 +145,12 @@ async function registerLines(CONFIG, nn, pairs, max_paquet = 100) {
     logger_1.default.debug(`${total} total pairs to insert`);
     const bar = new progress_1.default(':current/:total :bar (:percent, :etas) ', { total, complete: "=", incomplete: " ", head: '>' });
     const create_document = id => { return { data: pairs[id] }; };
-    const insert_many = ids => interactors.bulk(ids.map(id => create_document(id)));
+    const insert_many = ids => interactors.bulk({ docs: ids.map(id => create_document(id)) });
     let ids_to_push = [];
     for (const id in pairs) {
         ids_to_push.push(id);
         if (ids_to_push.length >= max_paquet) {
-            await insert_many({ docs: ids_to_push }).catch(() => insert_many(ids_to_push));
+            await insert_many(ids_to_push).catch(() => insert_many(ids_to_push));
             bar.tick(ids_to_push.length);
             ids_to_push = [];
         }
