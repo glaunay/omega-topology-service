@@ -136,7 +136,7 @@ export async function renewDatabase(CONFIG: Config, nn: nano.ServerScope, renew_
  * @param {{ [id: string]: Iterable<string> }} pairs
  * @param {number} [max_paquet=100]
  */
-export async function registerPairs(CONFIG: Config, nn: nano.ServerScope, pairs: { [id: string]: Iterable<string> }, max_paquet = 100) {
+export async function registerPairs(CONFIG: Config, nn: nano.ServerScope, pairs: { [id: string]: Iterable<string> }, max_paquet = 1000) {
     const document_name = CONFIG.databases.partners;
 
     logger.debug(`Creating database ${document_name}`);
@@ -149,23 +149,24 @@ export async function registerPairs(CONFIG: Config, nn: nano.ServerScope, pairs:
 
     const bar = new ProgressBar(':current/:total :bar (:percent, :etas) ', { total, complete: "=", incomplete: " ", head: '>' });
 
-    let promises: Promise<any>[] = [];
+    const create_document = id => { return { partners: pairs[id] } as MaybeDocument };
+    const insert_many = ids => id_db.bulk(ids.map(id => create_document(id)));
 
-    const try_once = id => id_db.insert({ partners: pairs[id] } as MaybeDocument, id).then(() => bar.tick());
+    let ids_to_push = [];
 
     for (const id in pairs) {
-        if (promises.length >= max_paquet) {
-            await Promise.all(promises);
+        ids_to_push.push(id);
 
-            promises = [];
+        if (ids_to_push.length >= max_paquet) {
+            await insert_many({ docs: ids_to_push }).catch(() => insert_many(ids_to_push));
+            bar.tick(ids_to_push.length);
+
+            ids_to_push = [];
         }
-
-        promises.push(
-            try_once(id).catch(() => (new Promise(resolve => setTimeout(resolve, 50))).then(() => try_once)).catch(e => logger.warn("Could not insert a line.", e))
-        );
     }
 
-    await Promise.all(promises);
+    await insert_many(ids_to_push);
+    bar.tick(ids_to_push.length);
     bar.terminate();
 }
 
@@ -189,27 +190,24 @@ export async function registerLines(CONFIG: Config, nn: nano.ServerScope, pairs:
 
     const bar = new ProgressBar(':current/:total :bar (:percent, :etas) ', { total, complete: "=", incomplete: " ", head: '>' });
 
-    let promises: Promise<any>[] = [];
+    const create_document = id => { return { data: pairs[id] } as MaybeDocument };
+    const insert_many = ids => interactors.bulk(ids.map(id => create_document(id)));
+
+    let ids_to_push = [];
+
     for (const id in pairs) {
-        if (promises.length >= max_paquet) {
-            await Promise.all(promises);
+        ids_to_push.push(id);
 
-            promises = [];
+        if (ids_to_push.length >= max_paquet) {
+            await insert_many({ docs: ids_to_push }).catch(() => insert_many(ids_to_push));
+            bar.tick(ids_to_push.length);
+
+            ids_to_push = [];
         }
-
-        let p = interactors.insert({ data: pairs[id] } as MaybeDocument, id).then(() => bar.tick());
-
-        promises.push(
-            p.catch(() => {
-                // Attendre
-                return new Promise(resolve => setTimeout(resolve, 500))
-                    .then(() => interactors.insert({ data: pairs[id] } as MaybeDocument, id).then(() => bar.tick()))
-                    .catch(e => logger.warn("Could not insert a line.", e))
-            })
-        );
     }
 
-    await Promise.all(promises);
+    await insert_many(ids_to_push);
+    bar.tick(ids_to_push.length);
     bar.terminate();
 }
 

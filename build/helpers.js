@@ -105,7 +105,7 @@ exports.renewDatabase = renewDatabase;
  * @param {{ [id: string]: Iterable<string> }} pairs
  * @param {number} [max_paquet=100]
  */
-async function registerPairs(CONFIG, nn, pairs, max_paquet = 100) {
+async function registerPairs(CONFIG, nn, pairs, max_paquet = 1000) {
     const document_name = CONFIG.databases.partners;
     logger_1.default.debug(`Creating database ${document_name}`);
     await nn.db.create(document_name).catch(() => { });
@@ -113,16 +113,19 @@ async function registerPairs(CONFIG, nn, pairs, max_paquet = 100) {
     const total = Object.keys(pairs).length;
     logger_1.default.debug(`${total} total pairs to insert`);
     const bar = new progress_1.default(':current/:total :bar (:percent, :etas) ', { total, complete: "=", incomplete: " ", head: '>' });
-    let promises = [];
-    const try_once = id => id_db.insert({ partners: pairs[id] }, id).then(() => bar.tick());
+    const create_document = id => { return { partners: pairs[id] }; };
+    const insert_many = ids => id_db.bulk(ids.map(id => create_document(id)));
+    let ids_to_push = [];
     for (const id in pairs) {
-        if (promises.length >= max_paquet) {
-            await Promise.all(promises);
-            promises = [];
+        ids_to_push.push(id);
+        if (ids_to_push.length >= max_paquet) {
+            await insert_many({ docs: ids_to_push }).catch(() => insert_many(ids_to_push));
+            bar.tick(ids_to_push.length);
+            ids_to_push = [];
         }
-        promises.push(try_once(id).catch(() => (new Promise(resolve => setTimeout(resolve, 50))).then(() => try_once)).catch(e => logger_1.default.warn("Could not insert a line.", e)));
     }
-    await Promise.all(promises);
+    await insert_many(ids_to_push);
+    bar.tick(ids_to_push.length);
     bar.terminate();
 }
 exports.registerPairs = registerPairs;
@@ -141,21 +144,19 @@ async function registerLines(CONFIG, nn, pairs, max_paquet = 100) {
     const total = Object.keys(pairs).length;
     logger_1.default.debug(`${total} total pairs to insert`);
     const bar = new progress_1.default(':current/:total :bar (:percent, :etas) ', { total, complete: "=", incomplete: " ", head: '>' });
-    let promises = [];
+    const create_document = id => { return { data: pairs[id] }; };
+    const insert_many = ids => interactors.bulk(ids.map(id => create_document(id)));
+    let ids_to_push = [];
     for (const id in pairs) {
-        if (promises.length >= max_paquet) {
-            await Promise.all(promises);
-            promises = [];
+        ids_to_push.push(id);
+        if (ids_to_push.length >= max_paquet) {
+            await insert_many({ docs: ids_to_push }).catch(() => insert_many(ids_to_push));
+            bar.tick(ids_to_push.length);
+            ids_to_push = [];
         }
-        let p = interactors.insert({ data: pairs[id] }, id).then(() => bar.tick());
-        promises.push(p.catch(() => {
-            // Attendre
-            return new Promise(resolve => setTimeout(resolve, 500))
-                .then(() => interactors.insert({ data: pairs[id] }, id).then(() => bar.tick()))
-                .catch(e => logger_1.default.warn("Could not insert a line.", e));
-        }));
     }
-    await Promise.all(promises);
+    await insert_many(ids_to_push);
+    bar.tick(ids_to_push.length);
     bar.terminate();
 }
 exports.registerLines = registerLines;

@@ -13,7 +13,7 @@ commander_1.default
     .option('-i, --only-interactors', 'Rebuild only interactors couples from mitab. Ignore the mitab full lines.')
     .option('-n, --no-serve', 'After rebuild, do not enable server and quit instead', false)
     .option('-m, --only-lines', 'Rebuild only stored lines from mitab. Ignore the interactors couples.')
-    .option('-t, --threads <number>', 'Number of simultenous request to database when constructing from mitab.', Number, 100)
+    .option('-t, --threads <number>', 'Number of simultenous request to database when constructing from mitab.', Number, 1000)
     .option('-c, --rebuild-cache <specie>', 'Rebuild OMTree cache. Specify "all" for rebuilding all the cache.')
     .option('-d, --disable-automatic-rebuild', 'Disable the automatic check of the old cached topologies to rebuild')
     .option('-p, --port <listenPort>', 'Port to open for listening to queries', Number, 3455)
