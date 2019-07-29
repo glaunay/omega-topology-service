@@ -10,7 +10,7 @@ files = sys.argv[1:]
 output_file = open('merged.mitab', 'w')
 
 mitab_cache = {}
-reg = re.compile("^(uniprotkb:)?(.+)");
+reg = re.compile("^(uniprotkb:)?(.+)")
 
 for f in files:
     with open(f) as content:
