@@ -86,7 +86,7 @@ mv merged_uniprot_safe.mitab source/mitab
 
 Homology files **must** follow the following schema: `uniprot_<specie_name_uppercase>_homology.json`.
 
-<!-- ## Todo speice name front conserve -->
+The specie name specified will be used as key, in the `/tree/:specie` endpoint, to download the serialized `OmegaTopology` object linked to this homology tree.
 
 If you want to change the MI Tab filename, specify its path in the configuration file (`mitab` key).
 
@@ -213,6 +213,8 @@ If the automatic rebuild is not disabled (`-d` option), the service will try, ev
 One endpoint is available to requests in this service.
 
 The endpoint serve the pre-computed OmegaTopology skeleton computed every 15 days (by default).
+
+The asked specie name is the name present in the JSON homology tree filename, between `uniprot_` et `_homology`.
 
 Specie name should be in uppercase. If the requested skeleton is not in cache, return a HTTP `404 Not Found` with empty body.
 
