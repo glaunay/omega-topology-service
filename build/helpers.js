@@ -90,7 +90,7 @@ exports.rebuildTreesFrom = rebuildTreesFrom;
 async function renewDatabase(CONFIG, nn, renew_partners, renew_lines) {
     if (renew_partners) {
         logger_1.default.debug(`Destroying partners database (${CONFIG.databases.partners})`);
-        await nn.db.destroy(CONFIG.databases.partners).catch(() => { });
+        await nn.db.destroy(CONFIG.databases.partners).catch((e) => logger_1.default.error(e));
     }
     if (renew_lines) {
         logger_1.default.debug(`Destroying MI Tab lines database (${CONFIG.databases.mitab_lines})`);

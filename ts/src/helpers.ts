@@ -121,7 +121,7 @@ export async function rebuildTreesFrom(CONFIG: Config, files: string[]) : Promis
 export async function renewDatabase(CONFIG: Config, nn: nano.ServerScope, renew_partners: boolean, renew_lines: boolean) : Promise<void> {
     if (renew_partners) {
         logger.debug(`Destroying partners database (${CONFIG.databases.partners})`);
-        await nn.db.destroy(CONFIG.databases.partners).catch(() => {});
+        await nn.db.destroy(CONFIG.databases.partners).catch((e) => logger.error(e));
     }
     if (renew_lines) {
         logger.debug(`Destroying MI Tab lines database (${CONFIG.databases.mitab_lines})`);

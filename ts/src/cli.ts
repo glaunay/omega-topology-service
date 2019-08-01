@@ -1,8 +1,9 @@
 import commander from 'commander';
 import fs from 'fs';
 import express from 'express';
-import { Config, reconstructBDD, automaticCacheBuild, rebuildAllCache } from './helpers';
+import { Config, reconstructBDD, automaticCacheBuild, rebuildAllCache, renewDatabase } from './helpers';
 import logger from './logger';
+import nano = require('nano');
 
 commander
     .option('-r, --rebuild <specie>', 'Rebuild partners from mitab & OMTree cache. Specify "all" for rebuilding all trees.')
@@ -13,6 +14,7 @@ commander
     .option('-c, --rebuild-cache <specie>', 'Rebuild OMTree cache. Specify "all" for rebuilding all the cache.')
     .option('-d, --disable-automatic-rebuild', 'Disable the automatic check of the old cached topologies to rebuild')
     .option('-p, --port <listenPort>', 'Port to open for listening to queries', Number, 3455)
+    .option('-d, --debug', 'Debug mode, RESET THE DATABASES', false)
     .option('-s, --configFile <configFile>', 'Configuration file. Must be a JSON file implementing the Config interface as defined in helpers.ts', String, 'config.json')
     .option('-l, --log-level [logLevel]', 'Log level [debug|verbose|info|warn|error]', /^(debug|verbose|info|warn|error)$/, 'info')
 .parse(process.argv);
@@ -45,6 +47,10 @@ logger.verbose("Choosen config file: " + file_config);
 const CONFIG = JSON.parse(fs.readFileSync(file_config, { encoding: "utf-8" })) as Config;
 
 (async () => {
+    if (commander.debug) {
+        await renewDatabase(CONFIG, nano(CONFIG.couchdb), true, true);
+    }
+
     // Main process
     if (commander.rebuild) {    
         logger.debug("Rebuilding MI Tab in CouchDB");
