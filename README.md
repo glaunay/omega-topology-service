@@ -86,6 +86,8 @@ mv merged_uniprot_safe.mitab source/mitab
 
 Homology files **must** follow the following schema: `uniprot_<specie_name_uppercase>_homology.json`.
 
+<!-- ## Todo speice name front conserve -->
+
 If you want to change the MI Tab filename, specify its path in the configuration file (`mitab` key).
 
 ### Setting up CouchDB

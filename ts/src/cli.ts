@@ -149,7 +149,7 @@ const CONFIG = JSON.parse(fs.readFileSync(file_config, { encoding: "utf-8" })) a
                     })
                 }
                 else {
-                    res.status(404).send();
+                    res.status(404).json({ status: false, error: "File not found" });
                 }
             });
         }

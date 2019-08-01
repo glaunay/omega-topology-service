@@ -21,6 +21,6 @@
     "@types/express": "^4.17.0",
     "@types/node": "^12.6.8",
     "@types/progress": "^2.0.3",
-    "omega-topology-fullstack": "^1.5.3"
+    "omega-topology-fullstack": "^1.5.4"
   }
 }
