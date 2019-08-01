@@ -90,7 +90,7 @@ exports.rebuildTreesFrom = rebuildTreesFrom;
 async function renewDatabase(CONFIG, nn, renew_partners, renew_lines) {
     if (renew_partners) {
         logger_1.default.debug(`Destroying partners database (${CONFIG.databases.partners})`);
-        await nn.db.destroy(CONFIG.databases.partners).catch((e) => logger_1.default.error(e));
+        await nn.db.destroy(CONFIG.databases.partners).catch(() => { });
     }
     if (renew_lines) {
         logger_1.default.debug(`Destroying MI Tab lines database (${CONFIG.databases.mitab_lines})`);
@@ -173,7 +173,7 @@ exports.registerLines = registerLines;
 async function reconstructBDD(CONFIG, with_partners, with_lines, threads) {
     logger_1.default.info(`Rebuilding ${with_partners ? "partners" : 'only'} ${with_lines ? (with_partners ? "and " : "") + "lines" : ''}.`);
     logger_1.default.debug('Creating Nano Couch object');
-    const nn = nano_1.default(CONFIG.couchdb);
+    const nn = nano_1.default({ url: CONFIG.couchdb, requestDefaults: { proxy: null } });
     const heap_size = v8_1.default.getHeapStatistics().heap_size_limit;
     if (heap_size < 5 * 1024 * 1024 * 1024) {
         logger_1.default.error(`Allocated memory is too low (${(heap_size / (1024 * 1024)).toFixed(1)} Mo). Please use --max-old-space-size=8192`);

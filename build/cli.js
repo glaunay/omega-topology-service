@@ -8,7 +8,6 @@ const fs_1 = __importDefault(require("fs"));
 const express_1 = __importDefault(require("express"));
 const helpers_1 = require("./helpers");
 const logger_1 = __importDefault(require("./logger"));
-const nano = require("nano");
 commander_1.default
     .option('-r, --rebuild <specie>', 'Rebuild partners from mitab & OMTree cache. Specify "all" for rebuilding all trees.')
     .option('-i, --only-interactors', 'Rebuild only interactors couples from mitab. Ignore the mitab full lines.')
@@ -18,7 +17,6 @@ commander_1.default
     .option('-c, --rebuild-cache <specie>', 'Rebuild OMTree cache. Specify "all" for rebuilding all the cache.')
     .option('-d, --disable-automatic-rebuild', 'Disable the automatic check of the old cached topologies to rebuild')
     .option('-p, --port <listenPort>', 'Port to open for listening to queries', Number, 3455)
-    .option('-d, --debug', 'Debug mode, RESET THE DATABASES', false)
     .option('-s, --configFile <configFile>', 'Configuration file. Must be a JSON file implementing the Config interface as defined in helpers.ts', String, 'config.json')
     .option('-l, --log-level [logLevel]', 'Log level [debug|verbose|info|warn|error]', /^(debug|verbose|info|warn|error)$/, 'info')
     .parse(process.argv);
@@ -43,9 +41,6 @@ const file_config = (function locate(fname) {
 logger_1.default.verbose("Choosen config file: " + file_config);
 const CONFIG = JSON.parse(fs_1.default.readFileSync(file_config, { encoding: "utf-8" }));
 (async () => {
-    if (commander_1.default.debug) {
-        await helpers_1.renewDatabase(CONFIG, nano(CONFIG.couchdb), true, true);
-    }
     // Main process
     if (commander_1.default.rebuild) {
         logger_1.default.debug("Rebuilding MI Tab in CouchDB");

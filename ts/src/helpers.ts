@@ -121,7 +121,7 @@ export async function rebuildTreesFrom(CONFIG: Config, files: string[]) : Promis
 export async function renewDatabase(CONFIG: Config, nn: nano.ServerScope, renew_partners: boolean, renew_lines: boolean) : Promise<void> {
     if (renew_partners) {
         logger.debug(`Destroying partners database (${CONFIG.databases.partners})`);
-        await nn.db.destroy(CONFIG.databases.partners).catch((e) => logger.error(e));
+        await nn.db.destroy(CONFIG.databases.partners).catch(() => {});
     }
     if (renew_lines) {
         logger.debug(`Destroying MI Tab lines database (${CONFIG.databases.mitab_lines})`);
@@ -227,7 +227,7 @@ export async function reconstructBDD(CONFIG: Config, with_partners: boolean, wit
     logger.info(`Rebuilding ${with_partners ? "partners" : 'only'} ${with_lines ? (with_partners ? "and " : "") + "lines" : ''}.`);
 
     logger.debug('Creating Nano Couch object');
-    const nn = nano(CONFIG.couchdb);
+    const nn = nano({ url: CONFIG.couchdb, requestDefaults: { proxy: null } });
 
     const heap_size = v8.getHeapStatistics().heap_size_limit;
 
