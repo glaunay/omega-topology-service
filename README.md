@@ -184,6 +184,10 @@ node build/cli.js -d
 
 More parameters are available, all of them is described using the `-h` or `--help` parameter.
 
+Here's a quick sum up of the differents available pipelines in `omega-topology-service`.
+
+![Sum up build pipelines](assets/build_cache.png)
+
 ### Requests
 
 One endpoint is available to requests in this service.
