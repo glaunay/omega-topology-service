@@ -206,7 +206,7 @@ You can **disable** this cache system with the `-h` option.
 
 #### Auto-rebuild interval
 
-If the automatic rebuild is not disabled (`-d` option), the service will try, every `max_days_before_renew` days, to rebuild trees from Couch database, in case they've been refreshed.
+If the automatic rebuild is not disabled (`-d` option), the service will try, every `max_days_before_renew` days, to rebuild trees from CouchDB, in case the database has been refreshed.
 
 ### Requests
 
