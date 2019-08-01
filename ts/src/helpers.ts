@@ -17,6 +17,8 @@ export interface Config {
     cache: string, 
     /** Maximum days until auto cache renew. */
     max_days_before_renew: number, 
+    /** Time between two synchronisation of the cache folder and the internal `JavaScript` cache served to users.  */
+    max_min_before_cache_update: number,
     /** omegalomodb request agregator URL */
     omegalomodb: string, 
     /** Database names, where the MI Tab file will be stored into CouchDB. */

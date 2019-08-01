@@ -112,6 +112,8 @@ interface Config {
     cache: string, 
     /** Maximum days until auto cache renew. */
     max_days_before_renew: number, 
+    /** Time between two synchronisation of the cache folder and the internal `JavaScript` cache served to users.  */
+    max_min_before_cache_update: number,
     /** omegalomodb request agregator URL */
     omegalomodb: string, 
     /** Database names, where the MI Tab file will be stored into CouchDB. */
@@ -189,6 +191,22 @@ More parameters are available, all of them is described using the `-h` or `--hel
 Here's a quick sum up of the differents available pipelines in `omega-topology-service`.
 
 ![Sum up build pipelines](assets/build_cache.png)
+
+### Warnings
+
+#### JavaScript cache for serialized objects
+This service use a internal `JavaScript` cache in order to read files in cache only **once**.
+
+But, to detect a cache update, the service will check every `30` minutes by default if a cached serialized object has been updated on the disk. 
+If a cached file is updated, it will be re-fetched automatically the next time a user wants it.
+
+You can **disable** this cache system with the `-h` option.
+
+**Warning**: Disabling the cache system will force the service to load the cached topology from the file system everytime a user wants it !
+
+#### Auto-rebuild interval
+
+If the automatic rebuild is not disabled (`-d` option), the service will try, every `max_days_before_renew` days, to rebuild trees from Couch database, in case it has been refreshed.
 
 ### Requests
 

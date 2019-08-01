@@ -5,6 +5,7 @@
     "omegalomodb": "http://localhost:3280",
     "cache": "./cache/",
     "max_days_before_renew": 15,
+    "max_min_before_cache_update": 30,
     "databases": {
         "partners": "id_map",
         "mitab_lines": "interactors"
